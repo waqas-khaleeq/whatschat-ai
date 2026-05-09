@@ -1,0 +1,127 @@
+{
+  "name": "Conversation",
+  "type": "object",
+  "properties": {
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_company": {
+      "type": "string"
+    },
+    "avatar_url": {
+      "type": "string"
+    },
+    "last_message": {
+      "type": "string"
+    },
+    "last_message_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "unread_count": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "contacted",
+        "qualified",
+        "appointment_booked",
+        "follow_up",
+        "won",
+        "lost",
+        "closed"
+      ],
+      "default": "new"
+    },
+    "handling_mode": {
+      "type": "string",
+      "enum": [
+        "ai",
+        "human",
+        "pending"
+      ],
+      "default": "ai"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "assigned_to_name": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lead_source": {
+      "type": "string"
+    },
+    "interest": {
+      "type": "string"
+    },
+    "budget": {
+      "type": "string"
+    },
+    "timeline": {
+      "type": "string"
+    },
+    "appointment_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "appointment_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "scheduled",
+        "confirmed",
+        "cancelled",
+        "completed"
+      ],
+      "default": "none"
+    },
+    "qualification_score": {
+      "type": "number"
+    },
+    "ai_summary": {
+      "type": "string"
+    },
+    "suggested_action": {
+      "type": "string"
+    },
+    "is_online": {
+      "type": "boolean",
+      "default": false
+    },
+    "follow_up_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "handover_reason": {
+      "type": "string"
+    },
+    "handover_by": {
+      "type": "string"
+    },
+    "handover_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "customer_phone"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "TeamMember",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "manager",
+        "sales_agent",
+        "support_agent"
+      ],
+      "default": "sales_agent"
+    },
+    "avatar_url": {
+      "type": "string"
+    },
+    "is_available": {
+      "type": "boolean",
+      "default": true
+    },
+    "active_conversations": {
+      "type": "number",
+      "default": 0
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "working_hours_start": {
+      "type": "string"
+    },
+    "working_hours_end": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "email",
+    "role"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "AppSettings",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string"
+    },
+    "value": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "ai_agent",
+        "calendar",
+        "notifications",
+        "general"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "value",
+    "category"
+  ]
+}

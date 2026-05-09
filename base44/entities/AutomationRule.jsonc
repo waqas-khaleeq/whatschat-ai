@@ -1,0 +1,63 @@
+{
+  "name": "AutomationRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "new_lead",
+        "keyword_match",
+        "no_reply",
+        "ai_low_confidence",
+        "angry_message",
+        "price_inquiry",
+        "appointment_request",
+        "lead_qualified",
+        "human_takeover",
+        "appointment_booked"
+      ]
+    },
+    "trigger_value": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "ai_reply",
+        "assign_team",
+        "send_followup",
+        "notify_human",
+        "transfer_human",
+        "book_appointment",
+        "update_status",
+        "add_tag",
+        "send_template"
+      ]
+    },
+    "action_value": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "priority": {
+      "type": "number",
+      "default": 1
+    },
+    "conditions": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "trigger",
+    "action"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "name": "KnowledgeBase",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "company_overview",
+        "services",
+        "pricing",
+        "faqs",
+        "sales_objections",
+        "booking_rules",
+        "policies",
+        "team_info",
+        "custom"
+      ],
+      "default": "faqs"
+    },
+    "content_type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "faq",
+        "url",
+        "pdf",
+        "doc",
+        "pricing",
+        "custom_instructions"
+      ],
+      "default": "text"
+    },
+    "content": {
+      "type": "string"
+    },
+    "faq_question": {
+      "type": "string"
+    },
+    "faq_answer": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "is_restricted": {
+      "type": "boolean",
+      "default": false
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "title",
+    "category"
+  ]
+}

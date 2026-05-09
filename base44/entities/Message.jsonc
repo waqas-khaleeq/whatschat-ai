@@ -1,0 +1,73 @@
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "conversation_id": {
+      "type": "string"
+    },
+    "sender": {
+      "type": "string",
+      "enum": [
+        "customer",
+        "agent",
+        "ai",
+        "system"
+      ],
+      "default": "customer"
+    },
+    "content": {
+      "type": "string"
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "image",
+        "document",
+        "audio",
+        "video",
+        "template",
+        "internal_note"
+      ],
+      "default": "text"
+    },
+    "media_url": {
+      "type": "string"
+    },
+    "media_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "delivered",
+        "read",
+        "failed"
+      ],
+      "default": "sent"
+    },
+    "is_ai_draft": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_approved": {
+      "type": "boolean",
+      "default": false
+    },
+    "whatsapp_message_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "conversation_id",
+    "content"
+  ]
+}
