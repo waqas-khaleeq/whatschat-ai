@@ -42,19 +42,19 @@ export default function MessageBubble({ msg }) {
     if (!isSent) return null;
     
     if (msg.status === "read" || msg.is_approved) {
-      return <CheckCheck className="w-4 h-4 text-[#53bdeb]" />;
+      return <CheckCheck className="w-4 h-4 text-blue-600" />;
     }
     if (msg.status === "delivered") {
-      return <CheckCheck className="w-4 h-4 text-white/70" />;
+      return <CheckCheck className="w-4 h-4 text-[#111b21]/70" />;
     }
     if (msg.status === "sent" || msg.status === "sending") {
-      return <Check className="w-4 h-4 text-white/70" />;
+      return <Check className="w-4 h-4 text-[#111b21]/70" />;
     }
     if (msg.status === "failed") {
       return <AlertCircle className="w-4 h-4 text-red-400" />;
     }
     // Default to single tick for agent messages
-    return <Check className="w-4 h-4 text-white/70" />;
+    return <Check className="w-4 h-4 text-[#111b21]/70" />;
   };
 
   const renderContent = () => {
@@ -70,8 +70,8 @@ export default function MessageBubble({ msg }) {
             {msg.content && msg.content !== msg.media_name && (
               <p className="text-sm mt-1.5 px-0.5 leading-relaxed text-white">{msg.content}</p>
             )}
-            <div className={cn("flex items-center justify-end gap-0.5 mt-1", isSent ? "" : "")}>
-              <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+            <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
+              <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
                 {timeStr}
               </span>
               {renderStatus()}
@@ -91,7 +91,7 @@ export default function MessageBubble({ msg }) {
               <p className="text-sm mt-1.5 leading-relaxed text-white">{msg.content}</p>
             )}
             <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
-              <span className="text-[11px] text-white/60">{timeStr}</span>
+              <span className="text-[11px] text-[#111b21]/70">{timeStr}</span>
               {renderStatus()}
             </div>
           </div>
@@ -109,7 +109,7 @@ export default function MessageBubble({ msg }) {
             <div className="flex-1 min-w-0">
               <audio src={msg.media_url} controls className="w-full h-8" />
               <div className={cn("flex items-center justify-end gap-0.5 mt-0.5")}>
-                <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
                   {timeStr}
                 </span>
                 {renderStatus()}
@@ -139,7 +139,7 @@ export default function MessageBubble({ msg }) {
               <p className="text-sm font-medium truncate leading-none">{msg.media_name || msg.content || "Document"}</p>
               <p className={cn("text-[11px] mt-0.5", isSent ? "text-white/60" : "text-[#667781]")}>Tap to open</p>
               <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
-                <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
                   {timeStr}
                 </span>
                 {renderStatus()}
@@ -156,7 +156,7 @@ export default function MessageBubble({ msg }) {
               "flex items-center justify-end gap-0.5 mt-1",
               isSent ? "" : ""
             )}>
-              <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+              <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
                 {timeStr}
               </span>
               {renderStatus()}
