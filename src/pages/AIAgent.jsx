@@ -30,7 +30,25 @@ const HANDOVER_TRIGGERS = [
   { key: "appointment", label: "Appointment booking needed" },
 ];
 
-const DEFAULT_PROMPT = "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Answer questions based on the knowledge base provided. If you don't know something, let the customer know you'll connect them with a team member.";
+const DEFAULT_PROMPT = `You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional.
+
+CAPABILITIES:
+- Answer questions based on the knowledge base provided
+- Check calendar availability and book appointments for customers
+- Provide real-time availability information
+- Confirm appointments and send details
+
+INSTRUCTIONS:
+1. Always offer to book appointments when customers show interest
+2. Check availability before confirming any appointment times
+3. Be proactive - suggest appointment times when relevant
+4. If you don't know something, let the customer know you'll connect them with a team member
+
+APPOINTMENT BOOKING:
+- Use calendar integration to check real-time availability
+- Suggest available time slots based on customer preference
+- Confirm all appointment details clearly
+- Never book without explicit customer confirmation`;
 
 export default function AIAgent() {
   const [activeMode, setActiveMode] = useState("auto");
@@ -191,7 +209,7 @@ export default function AIAgent() {
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                    This prompt is sent to the AI before every conversation. It defines personality, rules, and behavior. Changes are saved to the database and take effect immediately.
+                    This prompt is sent to the AI before every conversation. It defines personality, rules, behavior, and integration capabilities (calendar, knowledge base, etc). Changes take effect immediately.
                   </label>
                   <textarea
                     value={systemPrompt}
@@ -202,7 +220,7 @@ export default function AIAgent() {
                     className="w-full px-3 py-2.5 text-sm bg-muted rounded-lg border-0 outline-none resize-none focus:ring-2 focus:ring-primary/20 font-mono"
                   />
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    💡 Tip: Mention your business name, what you sell, tone, and any rules (e.g. "never discuss competitors").
+                   💡 Tip: The prompt already includes calendar and knowledge base capabilities. Customize business details, tone, and any special rules.
                   </p>
                 </div>
                 <div>
