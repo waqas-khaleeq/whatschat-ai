@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { MessageSquare, Users, Calendar, Bot, TrendingUp, Clock, CheckCircle, AlertCircle, ArrowRight, Zap } from "lucide-react";
+import { MessageSquare, Users, Calendar, Bot, Clock, CheckCircle, AlertCircle, ArrowRight, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import AppLayout from "@/components/layout/AppLayout";
 import { formatDistanceToNow } from "date-fns";
 
-const StatCard = ({ icon: Icon, label, value, sub, color, trend }) => (
+const StatCard = ({ icon: Icon, label, value, sub, color }) => (
   <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
     <CardContent className="p-5">
       <div className="flex items-start justify-between">
@@ -21,12 +21,6 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }) => (
           <Icon className="w-5 h-5" />
         </div>
       </div>
-      {trend && (
-        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-border/50">
-          <TrendingUp className="w-3 h-3 text-primary" />
-          <span className="text-xs text-primary font-medium">{trend}</span>
-        </div>
-      )}
     </CardContent>
   </Card>
 );
@@ -71,10 +65,10 @@ export default function Dashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={MessageSquare} label="Total Conversations" value={loading ? "..." : stats.total} sub={`${stats.unread} unread`} color="bg-blue-50 text-blue-600" trend="+12% this week" />
-          <StatCard icon={Users} label="New Leads" value={loading ? "..." : stats.new} sub="Today" color="bg-violet-50 text-violet-600" trend="+8% vs yesterday" />
-          <StatCard icon={Bot} label="AI Handled" value={loading ? "..." : stats.aiHandled} sub={`${stats.total ? Math.round((stats.aiHandled/stats.total)*100) : 0}% automation rate`} color="bg-primary/10 text-primary" trend="Saving 4.2hrs/day" />
-          <StatCard icon={Calendar} label="Appointments" value={loading ? "..." : stats.appointments} sub="Scheduled / confirmed" color="bg-amber-50 text-amber-600" trend="+3 today" />
+          <StatCard icon={MessageSquare} label="Total Conversations" value={loading ? "..." : stats.total} sub={`${stats.unread} unread`} color="bg-blue-50 text-blue-600" />
+          <StatCard icon={Users} label="New Leads" value={loading ? "..." : stats.new} sub="Uncontacted" color="bg-violet-50 text-violet-600" />
+          <StatCard icon={Bot} label="AI Handled" value={loading ? "..." : stats.aiHandled} sub={`${stats.total ? Math.round((stats.aiHandled/stats.total)*100) : 0}% automation rate`} color="bg-primary/10 text-primary" />
+          <StatCard icon={Calendar} label="Appointments" value={loading ? "..." : stats.appointments} sub="Scheduled / confirmed" color="bg-amber-50 text-amber-600" />
         </div>
 
         {/* Quick Actions */}

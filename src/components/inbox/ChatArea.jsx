@@ -126,6 +126,21 @@ export default function ChatArea({ conversation, onHandoverChange }) {
     setMessages([]);
     base44.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 100)
       .then(setMessages);
+
+    // Real-time subscription for new messages
+    const unsubscribe = base44.entities.Message.subscribe((event) => {
+      if (event.data?.conversation_id !== conversation.id) return;
+      if (event.type === "create") {
+        setMessages((prev) => {
+          const exists = prev.find((m) => m.id === event.id);
+          return exists ? prev : [...prev, event.data];
+        });
+      } else if (event.type === "update") {
+        setMessages((prev) => prev.map((m) => m.id === event.id ? { ...m, ...event.data } : m));
+      }
+    });
+
+    return () => unsubscribe();
   }, [conversation?.id]);
 
   useEffect(() => {
@@ -135,22 +150,34 @@ export default function ChatArea({ conversation, onHandoverChange }) {
   const sendMessage = async () => {
     if (!input.trim() || !conversation) return;
     setSending(true);
+    const text = input.trim();
+    setInput("");
+
     const msg = {
       conversation_id: conversation.id,
       sender: noteMode ? "system" : "agent",
       message_type: noteMode ? "internal_note" : "text",
-      content: input.trim(),
+      content: text,
       timestamp: new Date().toISOString(),
       status: "sent",
       agent_name: "You",
     };
     const created = await base44.entities.Message.create(msg);
     setMessages((prev) => [...prev, created]);
-    await base44.entities.Conversation.update(conversation.id, {
-      last_message: noteMode ? "[Note] " + input.trim() : input.trim(),
-      last_message_time: new Date().toISOString(),
-    });
-    setInput("");
+
+    if (!noteMode) {
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: text,
+        last_message_time: new Date().toISOString(),
+      });
+      // Send via WhatsApp API
+      base44.functions.invoke("whatsappWebhook", {
+        _send: true,
+        phone: conversation.customer_phone,
+        message: text,
+      }).catch(console.error);
+    }
+
     setSending(false);
   };
 
