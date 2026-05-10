@@ -137,16 +137,46 @@ Deno.serve(async (req) => {
     }
 
     for (const message of value.messages) {
-      // Skip non-text messages and status updates
-      if (message.type && message.type !== "text") continue;
-
       const phone = message.from;
-      const text = message.text?.body || "";
       const waMessageId = message.id;
       const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
 
-      // Skip empty messages
-      if (!text.trim()) continue;
+      // Handle different message types
+      let messageType = "text";
+      let content = "";
+      let mediaUrl = null;
+      let mediaName = null;
+
+      if (message.type === "text") {
+        content = message.text?.body || "";
+        if (!content.trim()) continue;
+      } else if (message.type === "audio") {
+        messageType = "audio";
+        const audio = message.audio;
+        mediaUrl = audio.link;
+        content = "[Voice Message]";
+        mediaName = `voice-${waMessageId}.ogg`;
+      } else if (message.type === "image") {
+        messageType = "image";
+        const img = message.image;
+        mediaUrl = img.link;
+        content = img.caption || "[Image]";
+        mediaName = `image-${waMessageId}`;
+      } else if (message.type === "document") {
+        messageType = "document";
+        const doc = message.document;
+        mediaUrl = doc.link;
+        content = doc.filename || "[Document]";
+        mediaName = doc.filename;
+      } else if (message.type === "video") {
+        messageType = "video";
+        const vid = message.video;
+        mediaUrl = vid.link;
+        content = vid.caption || "[Video]";
+        mediaName = `video-${waMessageId}`;
+      } else {
+        continue;
+      }
 
       // Find or create conversation
       let conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
@@ -181,8 +211,10 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.Message.create({
         conversation_id: conversation.id,
         sender: "customer",
-        content: text,
-        message_type: "text",
+        content: content,
+        message_type: messageType,
+        media_url: mediaUrl,
+        media_name: mediaName,
         whatsapp_message_id: waMessageId,
         timestamp: timestamp,
         status: "delivered",

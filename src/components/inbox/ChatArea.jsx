@@ -440,9 +440,18 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
 
       {/* Recording banner */}
       {recording && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-red-50 border-t border-red-100">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-xs text-red-600 font-medium">Recording... tap stop when done</span>
+        <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-red-50 border-t border-red-100">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs text-red-600 font-medium">Recording...</span>
+          </div>
+          <button
+            onClick={handleVoiceRecord}
+            className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-full transition-colors"
+          >
+            <Square className="w-3 h-3 inline mr-1" />
+            Stop & Send
+          </button>
         </div>
       )}
 
