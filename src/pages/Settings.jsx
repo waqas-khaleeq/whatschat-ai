@@ -351,7 +351,7 @@ export default function Settings() {
                  <p><strong>a)</strong> Visit <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="underline text-amber-700 font-medium">Google Cloud Console → Credentials</a></p>
                  <p><strong>b)</strong> Click "Create Credentials" → OAuth Client ID</p>
                  <p><strong>c)</strong> Choose "Web application"</p>
-                 <p><strong>d)</strong> Add authorized redirect URI: <span className="font-mono bg-white px-2 py-1 rounded text-[10px]">https://accounts.google.com/o/oauth2/auth</span></p>
+                 <p><strong>d)</strong> Add authorized redirect URI: <span className="font-mono bg-white px-2 py-1 rounded text-[10px]">http://localhost:3000/callback</span> (or your app's callback URL)</p>
                  <p><strong>e)</strong> Copy the <span className="font-semibold">Client ID</span> and <span className="font-semibold">Client Secret</span></p>
                </CardContent>
              </Card>
