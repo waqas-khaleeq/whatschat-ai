@@ -15,7 +15,12 @@ export default function Inbox() {
     const id = params.get("id");
     base44.entities.Conversation.list("-last_message_time", 100)
       .then((data) => {
-        setConversations(data);
+        // Only show real conversations from WhatsApp (created by service role webhook)
+        const real = data.filter(c => 
+          c.created_by?.startsWith("service+") || 
+          /^\d{10,15}$/.test((c.customer_phone || "").replace(/\+/g, ""))
+        );
+        setConversations(real);
         if (id) {
           const found = data.find((c) => c.id === id);
           if (found) setSelected(found);
