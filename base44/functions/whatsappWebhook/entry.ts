@@ -118,6 +118,10 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Deduplicate: skip if we already processed this WhatsApp message ID
+      const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
+      if (existingMsgs.length > 0) continue;
+
       // Save message
       await base44.asServiceRole.entities.Message.create({
         conversation_id: conversation.id,
