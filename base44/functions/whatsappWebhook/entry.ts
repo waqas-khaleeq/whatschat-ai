@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
         conversation = await base44.asServiceRole.entities.Conversation.create({
           customer_phone: phone,
           customer_name: contact?.profile?.name || phone,
-          last_message: text,
+          last_message: content,
           last_message_time: timestamp,
           unread_count: 1,
           status: "new",
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
       } else {
         // Update existing conversation
         await base44.asServiceRole.entities.Conversation.update(conversation.id, {
-          last_message: text,
+          last_message: content,
           last_message_time: timestamp,
           unread_count: (conversation.unread_count || 0) + 1,
         });
@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
       });
 
       // If AI mode — send an auto-reply via WhatsApp API
-      if (conversation.handling_mode !== "human" && text) {
+      if (conversation.handling_mode !== "human" && content) {
         // Fetch in parallel: chat history, knowledge base, system prompt setting
         const [prevMessages, kbEntries, promptSettings] = await Promise.all([
           base44.asServiceRole.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 20),
@@ -253,11 +253,11 @@ Deno.serve(async (req) => {
         const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
           prompt: `${systemPrompt}
 
-${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
-${historyText ? `Previous conversation:\n${historyText}\n` : ""}
-Customer's latest message: "${text}"
+        ${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
+        ${historyText ? `Previous conversation:\n${historyText}\n` : ""}
+        Customer's latest message: "${content}"
 
-Reply only with your response message, nothing else.`,
+        Reply only with your response message, nothing else.`,
         });
 
         // Send via WhatsApp Cloud API
