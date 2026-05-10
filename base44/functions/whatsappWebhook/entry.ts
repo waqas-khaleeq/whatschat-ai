@@ -24,6 +24,11 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
+    // Return verify token for Settings page display
+    if (body._getVerifyToken) {
+      return Response.json({ verifyToken: VERIFY_TOKEN });
+    }
+
     // Handle test message from Settings page
     if (body._test && body.phone) {
       const testRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {

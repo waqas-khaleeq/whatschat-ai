@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   Smartphone, Bot, BookOpen, Calendar, Users, Tag, Plug, Bell,
@@ -68,10 +68,16 @@ export default function Settings() {
   const [waPhone, setWaPhone] = useState("");
   const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
   const [waAccessToken, setWaAccessToken] = useState("");
-  const [waVerifyToken, setWaVerifyToken] = useState("");
+  const [waVerifyToken, setWaVerifyToken] = useState("Loading...");
   const [testingWa, setTestingWa] = useState(false);
   const [waTestResult, setWaTestResult] = useState(null);
   const WEBHOOK_URL = "https://api.base44.com/api/apps/69ff5fa3607b3fcc3cbe1d68/functions/whatsappWebhook";
+
+  useEffect(() => {
+    base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
+      .then(res => setWaVerifyToken(res.data?.verifyToken || ""))
+      .catch(() => setWaVerifyToken(""));
+  }, []);
 
   // AI settings
   const [aiEnabled, setAiEnabled] = useState(true);
