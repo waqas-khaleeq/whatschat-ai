@@ -118,6 +118,24 @@ Deno.serve(async (req) => {
       return new Response("OK", { status: 200 });
     }
 
+    // Also handle status updates (delivery/read receipts)
+    if (value.statuses) {
+      for (const status of value.statuses) {
+        const waId = status.id;
+        const statusType = status.status;
+        const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
+        
+        const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
+        if (msgs.length > 0) {
+          const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
+          await base44.asServiceRole.entities.Message.update(msgs[0].id, {
+            status: newStatus,
+            timestamp: timestamp,
+          });
+        }
+      }
+    }
+
     for (const message of value.messages) {
       // Skip non-text messages and status updates
       if (message.type && message.type !== "text") continue;

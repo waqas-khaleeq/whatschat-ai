@@ -138,17 +138,12 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   const sendMedia = async () => {
     if (!mediaPreview || !conversation) return;
     setSending(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
-    const res = await base44.functions.invoke("whatsappWebhook", {
-      _send: true,
-      phone: conversation.customer_phone,
-      media_url: file_url,
-      media_type: mediaPreview.type,
-      media_name: mediaPreview.name,
-      caption: input.trim() || undefined,
-    });
-    const status = res?.data?.success ? "sent" : "failed";
     const typeMap = { audio: "audio", video: "video", image: "image", document: "document" };
+
+    // Upload file
+    const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
+
+    // Create message optimistically
     const created = await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "agent",
@@ -157,10 +152,29 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       media_url: file_url,
       media_name: mediaPreview.name,
       timestamp: new Date().toISOString(),
-      status,
+      status: "sending",
       agent_name: "You",
     });
     setMessages((prev) => [...prev, created]);
+
+    // Send via WhatsApp
+    const res = await base44.functions.invoke("whatsappWebhook", {
+      _send: true,
+      phone: conversation.customer_phone,
+      media_url: file_url,
+      media_type: mediaPreview.type,
+      media_name: mediaPreview.name,
+      caption: input.trim() || undefined,
+    });
+    const success = res?.data?.success;
+    const newStatus = success ? "sent" : "failed";
+
+    // Update message with status and WhatsApp ID
+    await base44.entities.Message.update(created.id, {
+      status: newStatus,
+      whatsapp_message_id: res?.data?.data?.messages?.[0]?.id,
+    });
+
     await base44.entities.Conversation.update(conversation.id, {
       last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
       last_message_time: new Date().toISOString(),
@@ -193,29 +207,41 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         last_message: "[Note] " + content,
         last_message_time: new Date().toISOString(),
       });
+      setSending(false);
     } else {
-      const res = await base44.functions.invoke("whatsappWebhook", {
-        _send: true,
-        phone: conversation.customer_phone,
-        message: content,
-      });
-      const status = res?.data?.success ? "sent" : "failed";
+      // Create message optimistically first
       const created = await base44.entities.Message.create({
         conversation_id: conversation.id,
         sender: "agent",
         message_type: "text",
         content,
         timestamp: new Date().toISOString(),
-        status,
+        status: "sending",
         agent_name: "You",
       });
       setMessages((prev) => [...prev, created]);
+
+      // Then send via WhatsApp
+      const res = await base44.functions.invoke("whatsappWebhook", {
+        _send: true,
+        phone: conversation.customer_phone,
+        message: content,
+      });
+      const success = res?.data?.success;
+      const newStatus = success ? "sent" : "failed";
+
+      // Update message with WhatsApp ID and status
+      await base44.entities.Message.update(created.id, {
+        status: newStatus,
+        whatsapp_message_id: res?.data?.data?.messages?.[0]?.id,
+      });
+
       await base44.entities.Conversation.update(conversation.id, {
         last_message: content,
         last_message_time: new Date().toISOString(),
       });
+      setSending(false);
     }
-    setSending(false);
   };
 
   const handleTakeover = async () => {
