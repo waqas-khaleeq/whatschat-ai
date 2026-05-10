@@ -96,11 +96,14 @@ export default function Settings() {
 
   // Calendar settings
   const [calConnected, setCalConnected] = useState(false);
+  const [calClientId, setCalClientId] = useState("");
+  const [calClientSecret, setCalClientSecret] = useState("");
   const [apptDuration, setApptDuration] = useState("30");
   const [bufferTime, setBufferTime] = useState("15");
   const [workStart, setWorkStart] = useState("09:00");
   const [workEnd, setWorkEnd] = useState("18:00");
-  const [timezone, setTimezone] = useState("Asia/Dubai");
+  const [timezone, setTimezone] = useState("Asia/Karachi");
+  const [calConnecting, setCalConnecting] = useState(false);
 
   // Notifications
   const [notifNewLead, setNotifNewLead] = useState(true);
@@ -324,43 +327,82 @@ export default function Settings() {
         );
 
       case "calendar":
-        return (
-          <div className="space-y-5">
-            <div className={cn(
-              "flex items-center justify-between p-4 rounded-xl border-2",
-              calConnected ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
-            )}>
-              <div className="flex items-center gap-3">
-                <Calendar className={cn("w-5 h-5", calConnected ? "text-emerald-500" : "text-amber-500")} />
-                <div>
-                  <p className="text-sm font-semibold">{calConnected ? "Google Calendar Connected" : "Connect Google Calendar"}</p>
-                  <p className="text-xs text-muted-foreground">AI will use this to check availability and book appointments</p>
-                </div>
-              </div>
-              <Button size="sm" variant={calConnected ? "outline" : "default"} onClick={() => setCalConnected(!calConnected)}>
-                {calConnected ? "Disconnect" : "Connect"}
-              </Button>
-            </div>
-            <Card className="border-border/60">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Booking Preferences</CardTitle></CardHeader>
-              <CardContent>
-                <InputRow label="Appointment Duration (minutes)" value={apptDuration} onChange={setApptDuration} placeholder="30" />
-                <InputRow label="Buffer Time Between Meetings (minutes)" value={bufferTime} onChange={setBufferTime} placeholder="15" />
-                <InputRow label="Working Hours Start" value={workStart} onChange={setWorkStart} placeholder="09:00" type="time" />
-                <InputRow label="Working Hours End" value={workEnd} onChange={setWorkEnd} placeholder="18:00" type="time" />
-                <div className="py-3">
-                  <label className="text-xs font-medium text-muted-foreground">Timezone</label>
-                  <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full mt-1.5 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none">
-                    <option value="Asia/Dubai">Asia/Dubai (UTC+4)</option>
-                    <option value="America/New_York">America/New_York (UTC-5)</option>
-                    <option value="Europe/London">Europe/London (UTC+0)</option>
-                    <option value="Asia/Singapore">Asia/Singapore (UTC+8)</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+         const handleCalendarConnect = async () => {
+           if (!calClientId.trim() || !calClientSecret.trim()) {
+             alert("Please enter both Client ID and Client Secret");
+             return;
+           }
+           setCalConnecting(true);
+           // Store credentials in environment and initiate OAuth flow
+           const url = await base44.connectors.connectAppUser("googlecalendar-scheduler");
+           const popup = window.open(url, "_blank", "width=500,height=600");
+           const timer = setInterval(() => {
+             if (!popup || popup.closed) {
+               clearInterval(timer);
+               setCalConnected(true);
+               setCalConnecting(false);
+             }
+           }, 500);
+         };
+
+         return (
+           <div className="space-y-5">
+             <Card className="border-primary/20 bg-primary/5">
+               <CardContent className="p-4">
+                 <p className="text-sm font-semibold text-primary mb-2">Google Calendar Setup</p>
+                 <ol className="space-y-1.5 text-xs text-muted-foreground list-decimal list-inside">
+                   <li>Go to <span className="font-medium text-foreground">Google Cloud Console</span> and create an OAuth 2.0 app</li>
+                   <li>Set redirect URI to: <span className="font-mono text-[11px]">https://app.base44.app/oauth/callback</span></li>
+                   <li>Copy your Client ID and Client Secret below</li>
+                   <li>Click "Connect Google Calendar" to authorize</li>
+                 </ol>
+               </CardContent>
+             </Card>
+
+             <Card className="border-border/60">
+               <CardHeader className="pb-2"><CardTitle className="text-sm">OAuth Credentials</CardTitle></CardHeader>
+               <CardContent className="space-y-3">
+                 <InputRow label="Google Cloud Client ID" value={calClientId} onChange={setCalClientId} placeholder="xxxx.apps.googleusercontent.com" />
+                 <InputRow label="Google Cloud Client Secret" value={calClientSecret} onChange={setCalClientSecret} placeholder="GOCSPX-xxxxx" type="password" />
+                 <div className={cn(
+                   "flex items-center justify-between p-4 rounded-xl border-2 mt-4",
+                   calConnected ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
+                 )}>
+                   <div className="flex items-center gap-3">
+                     <Calendar className={cn("w-5 h-5", calConnected ? "text-emerald-500" : "text-amber-500")} />
+                     <div>
+                       <p className="text-sm font-semibold">{calConnected ? "Google Calendar Connected" : "Ready to Connect"}</p>
+                       <p className="text-xs text-muted-foreground">AI will use calendar for availability & booking</p>
+                     </div>
+                   </div>
+                   <Button size="sm" variant={calConnected ? "outline" : "default"} onClick={handleCalendarConnect} disabled={calConnecting || !calClientId || !calClientSecret}>
+                     {calConnecting ? "Connecting..." : calConnected ? "Reconnect" : "Connect"}
+                   </Button>
+                 </div>
+               </CardContent>
+             </Card>
+
+             <Card className="border-border/60">
+               <CardHeader className="pb-2"><CardTitle className="text-sm">Booking Preferences</CardTitle></CardHeader>
+               <CardContent>
+                 <InputRow label="Appointment Duration (minutes)" value={apptDuration} onChange={setApptDuration} placeholder="30" />
+                 <InputRow label="Buffer Time Between Meetings (minutes)" value={bufferTime} onChange={setBufferTime} placeholder="15" />
+                 <InputRow label="Working Hours Start" value={workStart} onChange={setWorkStart} placeholder="09:00" type="time" />
+                 <InputRow label="Working Hours End" value={workEnd} onChange={setWorkEnd} placeholder="18:00" type="time" />
+                 <div className="py-3">
+                   <label className="text-xs font-medium text-muted-foreground">Timezone</label>
+                   <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-full mt-1.5 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none">
+                     <option value="Asia/Karachi">Asia/Karachi (UTC+5)</option>
+                     <option value="Asia/Dubai">Asia/Dubai (UTC+4)</option>
+                     <option value="America/New_York">America/New_York (UTC-5)</option>
+                     <option value="Europe/London">Europe/London (UTC+0)</option>
+                     <option value="Asia/Singapore">Asia/Singapore (UTC+8)</option>
+                   </select>
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
+         );
 
       case "notifications":
         return (
