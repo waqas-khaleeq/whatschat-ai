@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import {
-  Send, Bot, User, MoreVertical,
-  CheckCheck, Check, AlertCircle, FileText,
+  Send, Bot, User, MoreVertical, Phone, Video,
   StickyNote, Zap, X, Paperclip, Mic, Square,
-  Image, Film, Volume2
+  Search, Info, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import MessageBubble from "./MessageBubble";
 import MediaPreview from "./MediaPreview";
 
@@ -19,17 +18,46 @@ const QUICK_REPLIES = [
   "Our team will get back to you within 24 hours.",
 ];
 
+function DateDivider({ date }) {
+  const label = isToday(date) ? "Today" : isYesterday(date) ? "Yesterday" : format(date, "MMMM d, yyyy");
+  return (
+    <div className="flex items-center justify-center my-4">
+      <div className="bg-[#e1f2fb] text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-full shadow-sm">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function groupMessagesByDate(messages) {
+  const groups = [];
+  let lastDate = null;
+  for (const msg of messages) {
+    const d = msg.timestamp ? new Date(msg.timestamp) : null;
+    const dateKey = d ? format(d, "yyyy-MM-dd") : null;
+    if (dateKey && dateKey !== lastDate) {
+      groups.push({ type: "divider", date: d, key: "div-" + dateKey });
+      lastDate = dateKey;
+    }
+    groups.push({ type: "msg", msg });
+  }
+  return groups;
+}
+
 export default function ChatArea({ conversation, onHandoverChange, onShowDetails }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [noteMode, setNoteMode] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [sending, setSending] = useState(false);
-  const [mediaPreview, setMediaPreview] = useState(null); // { file, url, type, name }
+  const [mediaPreview, setMediaPreview] = useState(null);
   const [recording, setRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
+  const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -42,7 +70,19 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Detect media type from file
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+  };
+
+  const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+
+  const autoResize = (e) => {
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+  };
+
   const getMediaType = (file) => {
     if (file.type.startsWith("image/")) return "image";
     if (file.type.startsWith("video/")) return "video";
@@ -83,9 +123,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   const sendMedia = async () => {
     if (!mediaPreview || !conversation) return;
     setSending(true);
-    // Upload file first
     const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
-    // Send via WhatsApp
     const res = await base44.functions.invoke("whatsappWebhook", {
       _send: true,
       phone: conversation.customer_phone,
@@ -95,10 +133,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       caption: input.trim() || undefined,
     });
     const status = res?.data?.success ? "sent" : "failed";
+    const typeMap = { audio: "audio", video: "video", image: "image", document: "document" };
     const created = await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "agent",
-      message_type: mediaPreview.type === "audio" ? "audio" : mediaPreview.type === "video" ? "video" : mediaPreview.type === "image" ? "image" : "document",
+      message_type: typeMap[mediaPreview.type] || "document",
       content: input.trim() || mediaPreview.name,
       media_url: file_url,
       media_name: mediaPreview.name,
@@ -122,6 +161,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     setSending(true);
     const content = input.trim();
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     if (noteMode) {
       const created = await base44.entities.Message.create({
@@ -195,91 +235,127 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
 
   if (!conversation) {
     return (
-      <div className="flex-1 flex items-center justify-center wa-bg">
-        <div className="text-center text-muted-foreground">
-          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Bot className="w-10 h-10 text-primary/40" />
-          </div>
-          <p className="font-medium text-foreground/60">Select a conversation</p>
-          <p className="text-sm mt-1">Choose from the list to start messaging</p>
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5]">
+        <div className="w-24 h-24 rounded-full bg-white shadow-md flex items-center justify-center mb-5">
+          <Bot className="w-12 h-12 text-[#128c7e]" />
         </div>
+        <h3 className="text-xl font-light text-[#41525d] mb-2">WhatsHub Inbox</h3>
+        <p className="text-sm text-[#667781]">Select a conversation to start messaging</p>
       </div>
     );
   }
 
   const isHuman = conversation.handling_mode === "human";
+  const initials = (conversation.customer_name || conversation.customer_phone || "?")[0].toUpperCase();
+  const grouped = groupMessagesByDate(messages);
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Header */}
-      <div className="h-14 bg-[hsl(var(--wa-header))] border-b border-border px-4 flex items-center justify-between shrink-0 shadow-sm">
+      {/* WhatsApp-style header */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[#f0f2f5] border-b border-[#e9edef] shrink-0">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center">
-              <span className="text-sm font-semibold text-primary">
-                {(conversation.customer_name || conversation.customer_phone || "?")[0].toUpperCase()}
-              </span>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#128c7e] to-[#25d366] flex items-center justify-center shadow-sm">
+              <span className="text-sm font-bold text-white">{initials}</span>
             </div>
             {conversation.is_online && (
-              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-card" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#25d366] rounded-full border-2 border-white" />
             )}
           </div>
           <div>
-            <p className="text-sm font-semibold leading-none">
+            <p className="text-sm font-semibold text-[#111b21] leading-none">
               {conversation.customer_name || conversation.customer_phone}
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {conversation.customer_phone}{conversation.is_online && " · Online"}
+            <p className="text-xs text-[#667781] mt-0.5">
+              {conversation.is_online ? "online" : conversation.customer_phone}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-1">
+          {/* AI/Human pill */}
           {isHuman ? (
-            <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-amber-200">
-              <User className="w-3 h-3" /> Human Mode
-            </div>
+            <button
+              onClick={handleReturnToAI}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold transition-colors mr-1"
+            >
+              <Bot className="w-3 h-3" /> Return to AI
+            </button>
           ) : (
-            <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-200">
-              <Bot className="w-3 h-3" /> AI Mode
-            </div>
+            <button
+              onClick={handleTakeover}
+              className="flex items-center gap-1.5 bg-[#128c7e] hover:bg-[#0f7a6d] text-white px-3 py-1.5 rounded-full text-xs font-semibold transition-colors mr-1"
+            >
+              <User className="w-3 h-3" /> Take Over
+            </button>
           )}
-          {isHuman ? (
-            <Button size="sm" variant="outline" onClick={handleReturnToAI} className="text-xs h-7 border-blue-200 text-blue-600 hover:bg-blue-50">
-              <Bot className="w-3 h-3 mr-1" /> Return to AI
-            </Button>
-          ) : (
-            <Button size="sm" onClick={handleTakeover} className="text-xs h-7 bg-amber-500 hover:bg-amber-600 text-white border-0">
-              <User className="w-3 h-3 mr-1" /> Take Over
-            </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={onShowDetails} className="text-xs h-7">Details</Button>
-          <button className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-            <MoreVertical className="w-4 h-4 text-muted-foreground" />
+          <button
+            onClick={onShowDetails}
+            className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors"
+            title="Contact info"
+          >
+            <Info className="w-5 h-5 text-[#54656f]" />
+          </button>
+          <button className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors">
+            <MoreVertical className="w-5 h-5 text-[#54656f]" />
           </button>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 wa-bg">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-muted-foreground">No messages yet</p>
+      {/* Mode indicator bar */}
+      <div className={cn(
+        "flex items-center justify-center gap-2 py-1.5 text-xs font-medium",
+        isHuman
+          ? "bg-amber-50 text-amber-700 border-b border-amber-100"
+          : "bg-blue-50 text-blue-700 border-b border-blue-100"
+      )}>
+        {isHuman ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
+        {isHuman ? "Human agent mode — you are handling this conversation" : "AI agent is handling this conversation automatically"}
+      </div>
+
+      {/* Chat background — WhatsApp pattern */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-2"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h60v60H0z' fill='%23e5ddd5'/%3E%3Cpath d='M30 0l30 30-30 30L0 30z' fill='%23ddd5cc' fill-opacity='0.3'/%3E%3C/svg%3E")`,
+          backgroundColor: "#e5ddd5",
+        }}
+      >
+        {grouped.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className="bg-white/80 rounded-lg px-4 py-2 text-xs text-[#667781] shadow-sm">
+              No messages yet. Say hello! 👋
+            </div>
           </div>
         ) : (
-          messages.map((msg, i) => (
-            <MessageBubble key={msg.id || i} msg={msg} />
-          ))
+          grouped.map((item, i) =>
+            item.type === "divider"
+              ? <DateDivider key={item.key} date={item.date} />
+              : <MessageBubble key={item.msg.id || i} msg={item.msg} />
+          )
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick replies */}
+      {/* Scroll-to-bottom button */}
+      {showScrollBtn && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-6 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+        >
+          <ChevronDown className="w-5 h-5 text-[#54656f]" />
+        </button>
+      )}
+
+      {/* Quick replies panel */}
       {showQuickReplies && (
-        <div className="bg-card border-t border-border px-4 py-2">
+        <div className="bg-white border-t border-[#e9edef] px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-muted-foreground">Quick Replies</span>
-            <button onClick={() => setShowQuickReplies(false)}>
-              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-[#128c7e] uppercase tracking-wide">Quick Replies</span>
+            <button onClick={() => setShowQuickReplies(false)} className="p-1 rounded hover:bg-gray-100">
+              <X className="w-3.5 h-3.5 text-[#667781]" />
             </button>
           </div>
           <div className="space-y-1">
@@ -287,7 +363,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
               <button
                 key={i}
                 onClick={() => { setInput(r); setShowQuickReplies(false); }}
-                className="w-full text-left text-xs px-3 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors truncate"
+                className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-[#f0f2f5] transition-colors text-[#111b21] border border-[#e9edef]"
               >
                 {r}
               </button>
@@ -296,7 +372,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         </div>
       )}
 
-      {/* Media preview bar */}
+      {/* Media preview */}
       {mediaPreview && (
         <MediaPreview
           preview={mediaPreview}
@@ -306,108 +382,112 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         />
       )}
 
-      {/* Input area */}
-      <div className="bg-[hsl(var(--wa-header))] border-t border-border px-3 py-2.5 shrink-0">
-        {noteMode && !mediaPreview && (
-          <div className="flex items-center gap-1.5 mb-2 px-1">
-            <StickyNote className="w-3 h-3 text-amber-500" />
-            <span className="text-xs text-amber-600 font-medium">Internal note — not visible to customer</span>
-            <button onClick={() => setNoteMode(false)} className="ml-auto">
-              <X className="w-3 h-3 text-amber-500" />
-            </button>
-          </div>
-        )}
-        {recording && (
-          <div className="flex items-center gap-2 mb-2 px-1">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-xs text-red-600 font-medium">Recording voice message... tap mic to stop</span>
-          </div>
-        )}
-        <div className="flex items-end gap-2">
-          {/* Quick replies */}
-          <button
-            onClick={() => setShowQuickReplies(!showQuickReplies)}
-            className="p-2 rounded-full hover:bg-muted transition-colors shrink-0"
-            title="Quick replies"
-          >
-            <Zap className="w-4 h-4 text-muted-foreground" />
+      {/* Note mode banner */}
+      {noteMode && !mediaPreview && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-t border-amber-100">
+          <StickyNote className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="text-xs text-amber-700 font-medium flex-1">Internal note — not visible to customer</span>
+          <button onClick={() => setNoteMode(false)} className="p-0.5 rounded hover:bg-amber-100">
+            <X className="w-3 h-3 text-amber-500" />
           </button>
+        </div>
+      )}
 
-          {/* Note mode */}
-          {!mediaPreview && (
+      {/* Recording banner */}
+      {recording && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-red-50 border-t border-red-100">
+          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-xs text-red-600 font-medium">Recording... tap stop when done</span>
+        </div>
+      )}
+
+      {/* Input bar — WhatsApp style */}
+      <div className="bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]">
+        {/* Attachment tools */}
+        {!mediaPreview && (
+          <>
+            <button
+              onClick={() => setShowQuickReplies(!showQuickReplies)}
+              className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
+              title="Quick replies"
+            >
+              <Zap className="w-5 h-5 text-[#54656f]" />
+            </button>
             <button
               onClick={() => setNoteMode(!noteMode)}
-              className={cn("p-2 rounded-full transition-colors shrink-0",
-                noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-muted text-muted-foreground"
+              className={cn(
+                "w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0",
+                noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-[#e9edef] text-[#54656f]"
               )}
               title="Internal note"
             >
-              <StickyNote className="w-4 h-4" />
+              <StickyNote className="w-5 h-5" />
             </button>
-          )}
+            {!noteMode && (
+              <>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
+                  title="Attach file"
+                >
+                  <Paperclip className="w-5 h-5 text-[#54656f]" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </>
+            )}
+          </>
+        )}
 
-          {/* Attach file */}
-          {!noteMode && !mediaPreview && (
-            <>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 rounded-full hover:bg-muted transition-colors shrink-0"
-                title="Attach image, video or document"
-              >
-                <Paperclip className="w-4 h-4 text-muted-foreground" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-            </>
-          )}
+        {/* Text box */}
+        {!mediaPreview && (
+          <div className={cn(
+            "flex-1 rounded-3xl px-4 py-2.5 flex items-end gap-2 shadow-sm",
+            noteMode ? "bg-amber-50 border border-amber-200" : "bg-white"
+          )}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => { setInput(e.target.value); autoResize(e); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+              }}
+              placeholder={noteMode ? "Write an internal note..." : "Type a message"}
+              className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed text-[#111b21] placeholder:text-[#667781] overflow-y-auto"
+              style={{ minHeight: 24, maxHeight: 120 }}
+              rows={1}
+            />
+          </div>
+        )}
 
-          {/* Text input (hidden when media is ready to send) */}
-          {!mediaPreview && (
-            <div className={cn(
-              "flex-1 rounded-2xl border px-4 py-2 flex items-end gap-2",
-              noteMode ? "bg-amber-50 border-amber-200" : "bg-white border-border"
-            )}>
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-                }}
-                placeholder={noteMode ? "Write an internal note..." : "Type a message..."}
-                className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed max-h-24 overflow-y-auto placeholder:text-muted-foreground"
-                rows={1}
-              />
-            </div>
-          )}
-
-          {/* Voice record (only when no text/media) */}
-          {!noteMode && !mediaPreview && !input.trim() && (
-            <button
-              onClick={handleVoiceRecord}
-              className={cn(
-                "p-2 rounded-full transition-colors shrink-0",
-                recording ? "bg-red-100 text-red-600 animate-pulse" : "hover:bg-muted text-muted-foreground"
-              )}
-              title={recording ? "Stop recording" : "Record voice message"}
-            >
-              {recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-          )}
-
-          {/* Send button */}
+        {/* Send or Mic */}
+        {!mediaPreview && !input.trim() && !noteMode ? (
+          <button
+            onClick={handleVoiceRecord}
+            className={cn(
+              "w-11 h-11 rounded-full flex items-center justify-center transition-colors shadow-sm shrink-0",
+              recording
+                ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                : "bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
+            )}
+            title={recording ? "Stop recording" : "Record voice"}
+          >
+            {recording ? <Square className="w-4 h-4" /> : <Mic className="w-5 h-5" />}
+          </button>
+        ) : (
           <button
             onClick={sendMessage}
             disabled={(!input.trim() && !mediaPreview) || sending}
-            className="w-10 h-10 bg-primary rounded-full flex items-center justify-center shrink-0 disabled:opacity-40 hover:bg-primary/90 transition-colors shadow-sm"
+            className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center shrink-0 disabled:opacity-40 transition-colors shadow-sm"
           >
-            <Send className="w-4 h-4 text-white" />
+            <Send className="w-5 h-5 text-white ml-0.5" />
           </button>
-        </div>
+        )}
       </div>
     </div>
   );
