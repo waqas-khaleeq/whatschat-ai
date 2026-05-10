@@ -71,7 +71,7 @@ export default function Settings() {
   const [waVerifyToken, setWaVerifyToken] = useState("Loading...");
   const [testingWa, setTestingWa] = useState(false);
   const [waTestResult, setWaTestResult] = useState(null);
-  const WEBHOOK_URL = `${window.location.origin}/functions/whatsappWebhook`;
+  const WEBHOOK_URL = "https://app--69ff5fa3607b3fcc3cbe1d68.base44.app/api/apps/69ff5fa3607b3fcc3cbe1d68/functions/whatsappWebhook";
 
   useEffect(() => {
     base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
