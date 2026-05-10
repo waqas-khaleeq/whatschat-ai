@@ -19,10 +19,30 @@ Deno.serve(async (req) => {
     return new Response("Forbidden", { status: 403 });
   }
 
-  // ── POST: incoming messages ────────────────────────────────────────────────
+  // ── POST: incoming messages / test ────────────────────────────────────────
   if (req.method === "POST") {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
+
+    // Handle test message from Settings page
+    if (body._test && body.phone) {
+      const testRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: body.phone,
+          type: "text",
+          text: { body: "✅ WhatsApp connection test successful! Your WhatsHub AI inbox is connected and ready." },
+        }),
+      });
+      const testData = await testRes.json();
+      if (!testRes.ok) return Response.json({ error: testData.error?.message || "Failed" }, { status: 400 });
+      return Response.json({ success: true });
+    }
 
     const entry = body?.entry?.[0];
     const changes = entry?.changes?.[0];
