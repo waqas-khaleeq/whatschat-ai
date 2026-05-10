@@ -74,7 +74,7 @@ export default function Settings() {
   const WEBHOOK_URL = "https://app--69ff5fa3607b3fcc3cbe1d68.base44.app/api/apps/69ff5fa3607b3fcc3cbe1d68/functions/whatsappWebhook";
 
   useEffect(() => {
-    // Fetch verify token and connection status in parallel
+    // Fetch verify token and calendar settings in parallel
     Promise.all([
       base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
         .then(res => setWaVerifyToken(res.data?.verifyToken || ""))
@@ -84,7 +84,25 @@ export default function Settings() {
           setWaConnected(res.data?.connected === true);
           setWaConnectionInfo(res.data);
         })
-        .catch(() => setWaConnected(false))
+        .catch(() => setWaConnected(false)),
+      // Load saved calendar settings from database
+      base44.entities.AppSettings.filter({ category: "calendar" })
+        .then((settings) => {
+          const settingMap = {};
+          settings.forEach(s => {
+            settingMap[s.key] = s.id;
+            if (s.key === "cal_client_id") setCalClientId(s.value);
+            if (s.key === "cal_client_secret") setCalClientSecret(s.value);
+            if (s.key === "appt_duration") setApptDuration(s.value);
+            if (s.key === "buffer_time") setBufferTime(s.value);
+            if (s.key === "work_start") setWorkStart(s.value);
+            if (s.key === "work_end") setWorkEnd(s.value);
+            if (s.key === "timezone") setTimezone(s.value);
+            if (s.key === "cal_connected") setCalConnected(s.value === "true");
+          });
+          setCalSettingIds(settingMap);
+        })
+        .catch(() => {})
     ]).finally(() => setCheckingWa(false));
   }, []);
 
@@ -104,6 +122,7 @@ export default function Settings() {
   const [workEnd, setWorkEnd] = useState("18:00");
   const [timezone, setTimezone] = useState("Asia/Karachi");
   const [calConnecting, setCalConnecting] = useState(false);
+  const [calSettingIds, setCalSettingIds] = useState({});
 
   // Notifications
   const [notifNewLead, setNotifNewLead] = useState(true);
@@ -111,7 +130,34 @@ export default function Settings() {
   const [notifAppt, setNotifAppt] = useState(true);
   const [notifMissed, setNotifMissed] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Save calendar settings to database
+    const calSettings = [
+      { key: "cal_client_id", value: calClientId },
+      { key: "cal_client_secret", value: calClientSecret },
+      { key: "appt_duration", value: apptDuration },
+      { key: "buffer_time", value: bufferTime },
+      { key: "work_start", value: workStart },
+      { key: "work_end", value: workEnd },
+      { key: "timezone", value: timezone },
+      { key: "cal_connected", value: calConnected ? "true" : "false" },
+    ];
+
+    for (const setting of calSettings) {
+      if (calSettingIds[setting.key]) {
+        // Update existing
+        await base44.entities.AppSettings.update(calSettingIds[setting.key], { value: setting.value });
+      } else {
+        // Create new
+        await base44.entities.AppSettings.create({
+          key: setting.key,
+          value: setting.value,
+          category: "calendar",
+          label: setting.key.replace(/_/g, " "),
+        });
+      }
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -327,17 +373,53 @@ export default function Settings() {
         );
 
       case "calendar":
-         const handleCalendarConnect = () => {
+         const handleCalendarConnect = async () => {
            if (!calClientId.trim() || !calClientSecret.trim()) {
              alert("Please enter both Client ID and Client Secret");
              return;
            }
            setCalConnecting(true);
-           // Simulate saving credentials and mark as connected
-           setTimeout(() => {
+           
+           // Save credentials immediately before attempting OAuth
+           const calSettings = [
+             { key: "cal_client_id", value: calClientId },
+             { key: "cal_client_secret", value: calClientSecret },
+           ];
+
+           try {
+             for (const setting of calSettings) {
+               if (calSettingIds[setting.key]) {
+                 await base44.entities.AppSettings.update(calSettingIds[setting.key], { value: setting.value });
+               } else {
+                 const created = await base44.entities.AppSettings.create({
+                   key: setting.key,
+                   value: setting.value,
+                   category: "calendar",
+                   label: setting.key.replace(/_/g, " "),
+                 });
+                 setCalSettingIds(prev => ({ ...prev, [setting.key]: created.id }));
+               }
+             }
+             
+             // Mark as connected
+             if (calSettingIds["cal_connected"]) {
+               await base44.entities.AppSettings.update(calSettingIds["cal_connected"], { value: "true" });
+             } else {
+               await base44.entities.AppSettings.create({
+                 key: "cal_connected",
+                 value: "true",
+                 category: "calendar",
+                 label: "cal connected",
+               });
+             }
+             
              setCalConnected(true);
+           } catch (err) {
+             console.error("Error saving calendar settings:", err);
+             alert("Error saving settings. Please try again.");
+           } finally {
              setCalConnecting(false);
-           }, 1500);
+           }
          };
 
          return (
