@@ -61,23 +61,43 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
 
   useEffect(() => {
     if (!conversation?.id) return;
-    setMessages([]);
+    
+    // Load initial messages
     base44.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 100)
-      .then(setMessages);
+      .then(msgs => {
+        setMessages(msgs || []);
+        // Scroll to bottom after loading
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      })
+      .catch(err => {
+        console.error("Failed to load messages:", err);
+        setMessages([]);
+      });
 
-    // Subscribe to real-time message updates
+    // Subscribe to ALL message changes in real-time
     const unsubscribe = base44.entities.Message.subscribe((event) => {
+      // Only process messages from this conversation
       if (event.data?.conversation_id === conversation.id) {
         if (event.type === "create") {
           setMessages((prev) => {
-            // Avoid duplicates if message already exists
-            if (prev.some((m) => m.id === event.id)) return prev;
-            return [...prev, event.data];
+            // Check if message already exists by ID
+            const exists = prev.some((m) => m.id === event.data.id);
+            if (exists) return prev;
+            // Add new message
+            const updated = [...prev, event.data];
+            // Auto-scroll after new message
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+            return updated;
           });
         } else if (event.type === "update") {
-          setMessages((prev) => prev.map((m) => (m.id === event.id ? event.data : m)));
+          setMessages((prev) => {
+            const updated = prev.map((m) => (m.id === event.data.id ? event.data : m));
+            // Auto-scroll on status update
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+            return updated;
+          });
         } else if (event.type === "delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== event.id));
+          setMessages((prev) => prev.filter((m) => m.id !== event.data.id));
         }
       }
     });
@@ -226,24 +246,32 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       setMessages((prev) => [...prev, created]);
 
       // Then send via WhatsApp
-      const res = await base44.functions.invoke("whatsappWebhook", {
-        _send: true,
-        phone: conversation.customer_phone,
-        message: content,
-      });
-      const success = res?.data?.success;
-      const newStatus = success ? "sent" : "failed";
+      try {
+        const res = await base44.functions.invoke("whatsappWebhook", {
+          _send: true,
+          phone: conversation.customer_phone,
+          message: content,
+        });
+        const success = res?.data?.success;
+        const newStatus = success ? "sent" : "failed";
+        const msgId = res?.data?.data?.messages?.[0]?.id || null;
 
-      // Update message with WhatsApp ID and status
-      await base44.entities.Message.update(created.id, {
-        status: newStatus,
-        whatsapp_message_id: res?.data?.data?.messages?.[0]?.id,
-      });
+        // Update message with WhatsApp ID and status
+        await base44.entities.Message.update(created.id, {
+          status: newStatus,
+          whatsapp_message_id: msgId,
+        });
 
-      await base44.entities.Conversation.update(conversation.id, {
-        last_message: content,
-        last_message_time: new Date().toISOString(),
-      });
+        // Update conversation
+        await base44.entities.Conversation.update(conversation.id, {
+          last_message: content,
+          last_message_time: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("Error sending message:", err);
+        // Update message status to failed
+        await base44.entities.Message.update(created.id, { status: "failed" });
+      }
       setSending(false);
     }
   };

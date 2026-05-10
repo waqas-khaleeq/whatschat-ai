@@ -221,78 +221,88 @@ Deno.serve(async (req) => {
       });
 
       // If AI mode — send an auto-reply via WhatsApp API
-      if (conversation.handling_mode !== "human" && content) {
-        // Fetch in parallel: chat history, knowledge base, system prompt setting
-        const [prevMessages, kbEntries, promptSettings] = await Promise.all([
-          base44.asServiceRole.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 20),
-          base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
-          base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
-        ]);
+      if (conversation.handling_mode === "ai" && content.trim()) {
+        try {
+          // Fetch in parallel: chat history, knowledge base, system prompt setting
+          const [prevMessages, kbEntries, promptSettings] = await Promise.all([
+            base44.asServiceRole.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 20),
+            base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
+            base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
+          ]);
 
-        // Build conversation history
-        const historyText = prevMessages
-          .filter(m => m.sender !== "system" && m.message_type !== "internal_note")
-          .map(m => {
-            const role = m.sender === "customer" ? "Customer" : "Assistant";
-            return `${role}: ${m.content}`;
-          })
-          .join("\n");
+          // Build conversation history
+          const historyText = prevMessages
+            .filter(m => m.sender !== "system" && m.message_type !== "internal_note" && m.id !== conversation.id)
+            .map(m => {
+              const role = m.sender === "customer" ? "Customer" : "Assistant";
+              return `${role}: ${m.content}`;
+            })
+            .join("\n");
 
-        // Build knowledge base context
-        const kbText = kbEntries.map(kb => {
-          if (kb.content_type === "faq" && kb.faq_question && kb.faq_answer) {
-            return `Q: ${kb.faq_question}\nA: ${kb.faq_answer}`;
+          // Build knowledge base context
+          const kbText = kbEntries.map(kb => {
+            if (kb.content_type === "faq" && kb.faq_question && kb.faq_answer) {
+              return `Q: ${kb.faq_question}\nA: ${kb.faq_answer}`;
+            }
+            return kb.content ? `[${kb.category}] ${kb.title}:\n${kb.content}` : `[${kb.category}] ${kb.title}`;
+          }).join("\n\n");
+
+          // System prompt from settings, or fallback default
+          const systemPrompt = promptSettings?.[0]?.value || "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Keep responses short and friendly.";
+
+          // Generate AI reply
+          const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
+            prompt: `${systemPrompt}
+
+      ${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
+      ${historyText ? `Previous conversation:\n${historyText}\n` : ""}
+      Customer's latest message: "${content}"
+
+      Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
+          });
+
+          if (!aiReply || !aiReply.trim()) {
+            console.log("AI reply empty, skipping");
+            return new Response("OK", { status: 200 });
           }
-          return kb.content ? `[${kb.category}] ${kb.title}:\n${kb.content}` : `[${kb.category}] ${kb.title}`;
-        }).join("\n\n");
 
-        // System prompt from settings, or fallback default
-        const systemPrompt = promptSettings?.[0]?.value || "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional.";
+          // Send via WhatsApp Cloud API
+          const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: phone,
+              type: "text",
+              text: { body: aiReply },
+            }),
+          });
 
-        // Generate AI reply
-        const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
-          prompt: `${systemPrompt}
+          const sendData = await sendRes.json();
+          const status = sendRes.ok ? "sent" : "failed";
 
-        ${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
-        ${historyText ? `Previous conversation:\n${historyText}\n` : ""}
-        Customer's latest message: "${content}"
+          // Save AI reply as message
+          await base44.asServiceRole.entities.Message.create({
+            conversation_id: conversation.id,
+            sender: "ai",
+            content: aiReply,
+            message_type: "text",
+            timestamp: new Date().toISOString(),
+            status: status,
+            whatsapp_message_id: sendData.messages?.[0]?.id || null,
+          });
 
-        Reply only with your response message, nothing else.`,
-        });
-
-        // Send via WhatsApp Cloud API
-        const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: phone,
-            type: "text",
-            text: { body: aiReply },
-          }),
-        });
-
-        const sendData = await sendRes.json();
-        const status = sendRes.ok ? "sent" : "failed";
-
-        // Save AI reply as message
-        await base44.asServiceRole.entities.Message.create({
-          conversation_id: conversation.id,
-          sender: "ai",
-          content: aiReply,
-          message_type: "text",
-          timestamp: new Date().toISOString(),
-          status: status,
-          whatsapp_message_id: sendData.messages?.[0]?.id,
-        });
-
-        await base44.asServiceRole.entities.Conversation.update(conversation.id, {
-          last_message: aiReply,
-          last_message_time: new Date().toISOString(),
-        });
+          await base44.asServiceRole.entities.Conversation.update(conversation.id, {
+            last_message: aiReply,
+            last_message_time: new Date().toISOString(),
+          });
+        } catch (err) {
+          console.error("AI reply error:", err.message);
+          // Continue without failing the webhook
+        }
       }
     }
 
