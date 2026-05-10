@@ -30,18 +30,32 @@ const HANDOVER_TRIGGERS = [
   { key: "appointment", label: "Appointment booking needed" },
 ];
 
+const DEFAULT_PROMPT = "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Answer questions based on the knowledge base provided. If you don't know something, let the customer know you'll connect them with a team member.";
+
 export default function AIAgent() {
   const [activeMode, setActiveMode] = useState("auto");
   const [activeTone, setActiveTone] = useState("professional");
   const [isEnabled, setIsEnabled] = useState(true);
   const [confidence, setConfidence] = useState(70);
-  const [customInstructions, setCustomInstructions] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_PROMPT);
+  const [promptSettingId, setPromptSettingId] = useState(null);
   const [fallbackMessage, setFallbackMessage] = useState("I'll connect you with one of our team members shortly.");
   const [handoverTriggers, setHandoverTriggers] = useState(["angry", "human_request", "low_confidence"]);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState("");
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    base44.entities.AppSettings.filter({ key: "ai_system_prompt" }).then((results) => {
+      if (results && results.length > 0) {
+        setSystemPrompt(results[0].value);
+        setPromptSettingId(results[0].id);
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const toggleHandoverTrigger = (key) => {
     setHandoverTriggers(prev =>
@@ -54,13 +68,26 @@ export default function AIAgent() {
     setTesting(true);
     setTestOutput("");
     const res = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are an AI assistant for a business. Based on this customer message, generate a helpful response.\n\nCustomer message: ${testInput}\n\nTone: ${activeTone}\nCustom instructions: ${customInstructions || "None"}\n\nRespond naturally as the AI agent would.`,
+      prompt: `${systemPrompt}\n\nCustomer message: ${testInput}\n\nRespond naturally as the AI agent would.`,
     });
     setTestOutput(res);
     setTesting(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Save system prompt to AppSettings
+    if (promptSettingId) {
+      await base44.entities.AppSettings.update(promptSettingId, { value: systemPrompt });
+    } else {
+      const created = await base44.entities.AppSettings.create({
+        key: "ai_system_prompt",
+        value: systemPrompt,
+        category: "ai_agent",
+        label: "AI System Prompt",
+        description: "The system prompt given to the AI agent for every conversation",
+      });
+      setPromptSettingId(created.id);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -154,23 +181,29 @@ export default function AIAgent() {
               </CardContent>
             </Card>
 
-            {/* Custom Instructions */}
+            {/* System Prompt */}
             <Card className="border-border/60">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">Custom Instructions</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-primary" /> AI System Prompt
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                    System instructions for the AI
+                    This prompt is sent to the AI before every conversation. It defines personality, rules, and behavior. Changes are saved to the database and take effect immediately.
                   </label>
                   <textarea
-                    value={customInstructions}
-                    onChange={(e) => setCustomInstructions(e.target.value)}
-                    placeholder="e.g. Always greet customers by name. Never mention competitor pricing. Focus on premium services..."
-                    rows={4}
-                    className="w-full px-3 py-2.5 text-sm bg-muted rounded-lg border-0 outline-none resize-none focus:ring-2 focus:ring-primary/20"
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder={DEFAULT_PROMPT}
+                    rows={7}
+                    disabled={loading}
+                    className="w-full px-3 py-2.5 text-sm bg-muted rounded-lg border-0 outline-none resize-none focus:ring-2 focus:ring-primary/20 font-mono"
                   />
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    💡 Tip: Mention your business name, what you sell, tone, and any rules (e.g. "never discuss competitors").
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">

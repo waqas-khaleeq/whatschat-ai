@@ -125,32 +125,42 @@ Deno.serve(async (req) => {
 
       // If AI mode — send an auto-reply via WhatsApp API
       if (conversation.handling_mode !== "human" && text) {
-        // Fetch recent chat history for context (last 20 messages)
-        const history = await base44.asServiceRole.entities.Message.filter(
-          { conversation_id: conversation.id },
-          "timestamp",
-          20
-        );
+        // Fetch in parallel: chat history, knowledge base, system prompt setting
+        const [prevMessages, kbEntries, promptSettings] = await Promise.all([
+          base44.asServiceRole.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 20),
+          base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
+          base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
+        ]);
 
-        // Build conversation history string
-        const historyText = history
-          .filter(m => m.message_type !== "internal_note")
+        // Build conversation history
+        const historyText = prevMessages
+          .filter(m => m.sender !== "system" && m.message_type !== "internal_note")
           .map(m => {
             const role = m.sender === "customer" ? "Customer" : "Assistant";
             return `${role}: ${m.content}`;
           })
           .join("\n");
 
-        // Generate AI reply with context
+        // Build knowledge base context
+        const kbText = kbEntries.map(kb => {
+          if (kb.content_type === "faq" && kb.faq_question && kb.faq_answer) {
+            return `Q: ${kb.faq_question}\nA: ${kb.faq_answer}`;
+          }
+          return kb.content ? `[${kb.category}] ${kb.title}:\n${kb.content}` : `[${kb.category}] ${kb.title}`;
+        }).join("\n\n");
+
+        // System prompt from settings, or fallback default
+        const systemPrompt = promptSettings?.[0]?.value || "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional.";
+
+        // Generate AI reply
         const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
-          prompt: `You are a helpful business assistant on WhatsApp. Reply concisely to the customer's latest message, taking into account the conversation history below.
+          prompt: `${systemPrompt}
 
-Conversation history:
-${historyText}
-
+${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
+${historyText ? `Previous conversation:\n${historyText}\n` : ""}
 Customer's latest message: "${text}"
 
-Reply only with your response, nothing else.`,
+Reply only with your response message, nothing else.`,
         });
 
         // Send via WhatsApp Cloud API
