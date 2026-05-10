@@ -158,18 +158,20 @@ export default function Settings() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Verify Token <span className="text-primary">(same value you set as WHATSAPP_VERIFY_TOKEN secret)</span></label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Verify Token <span className="text-primary">(copy this exactly into Meta's "Verify Token" field)</span>
+                  </label>
                   <div className="flex items-center gap-2 mt-1.5">
                     <input
+                      readOnly
                       value={waVerifyToken}
-                      onChange={e => setWaVerifyToken(e.target.value)}
-                      placeholder="Your verify token value..."
-                      className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary/20"
+                      className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none font-mono select-all"
                     />
                     <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(waVerifyToken)}>
                       <Copy className="w-3.5 h-3.5" /> Copy
                     </Button>
                   </div>
+                  <p className="text-xs text-amber-600 mt-1.5 font-medium">⚠ Paste this value exactly (no spaces) into Meta's Verify Token field</p>
                 </div>
               </CardContent>
             </Card>
