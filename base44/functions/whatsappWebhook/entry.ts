@@ -29,6 +29,21 @@ Deno.serve(async (req) => {
       return Response.json({ verifyToken: VERIFY_TOKEN });
     }
 
+    // Check if WhatsApp API is actually connected by calling the API
+    if (body._checkConnection) {
+      if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
+        return Response.json({ connected: false, reason: "Missing credentials" });
+      }
+      const checkRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}`, {
+        headers: { "Authorization": `Bearer ${ACCESS_TOKEN}` },
+      });
+      const checkData = await checkRes.json();
+      if (checkRes.ok && checkData.id) {
+        return Response.json({ connected: true, display_phone_number: checkData.display_phone_number, verified_name: checkData.verified_name });
+      }
+      return Response.json({ connected: false, reason: checkData.error?.message || "Invalid credentials" });
+    }
+
     // Handle manual agent send
     if (body._send && body.phone && body.message) {
       const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {

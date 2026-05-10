@@ -64,19 +64,28 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
 
   // WhatsApp settings
-  const [waConnected, setWaConnected] = useState(false);
+  const [waConnected, setWaConnected] = useState(null); // null = loading
+  const [waConnectionInfo, setWaConnectionInfo] = useState(null);
   const [waPhone, setWaPhone] = useState("");
-  const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
-  const [waAccessToken, setWaAccessToken] = useState("");
   const [waVerifyToken, setWaVerifyToken] = useState("Loading...");
   const [testingWa, setTestingWa] = useState(false);
   const [waTestResult, setWaTestResult] = useState(null);
+  const [checkingWa, setCheckingWa] = useState(true);
   const WEBHOOK_URL = "https://app--69ff5fa3607b3fcc3cbe1d68.base44.app/api/apps/69ff5fa3607b3fcc3cbe1d68/functions/whatsappWebhook";
 
   useEffect(() => {
-    base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
-      .then(res => setWaVerifyToken(res.data?.verifyToken || ""))
-      .catch(() => setWaVerifyToken(""));
+    // Fetch verify token and connection status in parallel
+    Promise.all([
+      base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
+        .then(res => setWaVerifyToken(res.data?.verifyToken || ""))
+        .catch(() => setWaVerifyToken("")),
+      base44.functions.invoke("whatsappWebhook", { _checkConnection: true })
+        .then(res => {
+          setWaConnected(res.data?.connected === true);
+          setWaConnectionInfo(res.data);
+        })
+        .catch(() => setWaConnected(false))
+    ]).finally(() => setCheckingWa(false));
   }, []);
 
   // AI settings
@@ -108,13 +117,12 @@ export default function Settings() {
     if (!waPhone.trim()) { setWaTestResult({ ok: false, msg: "Enter a phone number to send test message to." }); return; }
     setTestingWa(true);
     setWaTestResult(null);
-    try {
-      const res = await base44.functions.invoke("whatsappWebhook", {
-        _test: true, phone: waPhone
-      });
-      setWaTestResult({ ok: true, msg: "Test message sent successfully!" });
-    } catch (e) {
-      setWaTestResult({ ok: false, msg: e.message || "Failed to send test message." });
+    const res = await base44.functions.invoke("whatsappWebhook", { _test: true, phone: waPhone });
+    if (res.data?.success) {
+      setWaTestResult({ ok: true, msg: "Test message sent successfully! Check your WhatsApp." });
+      setWaConnected(true);
+    } else {
+      setWaTestResult({ ok: false, msg: res.data?.error || "Failed to send test message. Check your credentials." });
     }
     setTestingWa(false);
   };
@@ -126,6 +134,56 @@ export default function Settings() {
       case "whatsapp":
         return (
           <div className="space-y-5">
+            {/* Real connection status banner */}
+            <div className={cn(
+              "flex items-center justify-between p-4 rounded-xl border-2",
+              checkingWa ? "bg-muted border-border" :
+              waConnected ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
+            )}>
+              <div className="flex items-center gap-3">
+                {checkingWa ? (
+                  <RefreshCw className="w-5 h-5 text-muted-foreground animate-spin" />
+                ) : waConnected ? (
+                  <Wifi className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <WifiOff className="w-5 h-5 text-red-500" />
+                )}
+                <div>
+                  <p className={cn("text-sm font-semibold",
+                    checkingWa ? "text-muted-foreground" :
+                    waConnected ? "text-emerald-700" : "text-red-700"
+                  )}>
+                    {checkingWa ? "Checking connection..." :
+                     waConnected ? `WhatsApp Connected${waConnectionInfo?.verified_name ? ` · ${waConnectionInfo.verified_name}` : ""}` :
+                     "WhatsApp Not Connected"}
+                  </p>
+                  <p className={cn("text-xs mt-0.5",
+                    checkingWa ? "text-muted-foreground" :
+                    waConnected ? "text-emerald-600" : "text-red-500"
+                  )}>
+                    {checkingWa ? "Please wait..." :
+                     waConnected ? (waConnectionInfo?.display_phone_number || "API credentials verified") :
+                     (waConnectionInfo?.reason || "Check your API credentials below")}
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 gap-1.5"
+                disabled={checkingWa}
+                onClick={() => {
+                  setCheckingWa(true);
+                  base44.functions.invoke("whatsappWebhook", { _checkConnection: true })
+                    .then(res => { setWaConnected(res.data?.connected === true); setWaConnectionInfo(res.data); })
+                    .catch(() => setWaConnected(false))
+                    .finally(() => setCheckingWa(false));
+                }}
+              >
+                <RefreshCw className={cn("w-3 h-3", checkingWa && "animate-spin")} /> Recheck
+              </Button>
+            </div>
+
             {/* Step guide */}
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="p-4">
@@ -180,27 +238,25 @@ export default function Settings() {
             <Card className="border-border/60">
               <CardHeader className="pb-2"><CardTitle className="text-sm">API Credentials</CardTitle></CardHeader>
               <CardContent className="space-y-1">
-                <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                  <div>
-                    <p className="text-sm font-medium">Access Token</p>
-                    <p className="text-xs text-muted-foreground">WHATSAPP_ACCESS_TOKEN secret</p>
+                {[
+                  { label: "Access Token", desc: "WHATSAPP_ACCESS_TOKEN secret" },
+                  { label: "Phone Number ID", desc: "WHATSAPP_PHONE_NUMBER_ID secret" },
+                  { label: "Verify Token", desc: "WHATSAPP_VERIFY_TOKEN secret" },
+                ].map(({ label, desc }, i, arr) => (
+                  <div key={label} className={cn("flex items-center justify-between py-2.5", i < arr.length - 1 && "border-b border-border/40")}>
+                    <div>
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    {waConnected ? (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">✓ Set</Badge>
+                    ) : waConnected === false ? (
+                      <Badge className="bg-red-50 text-red-600 border-red-200 text-xs">⚠ Check</Badge>
+                    ) : (
+                      <Badge className="bg-muted text-muted-foreground text-xs">...</Badge>
+                    )}
                   </div>
-                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">✓ Set</Badge>
-                </div>
-                <div className="flex items-center justify-between py-2.5 border-b border-border/40">
-                  <div>
-                    <p className="text-sm font-medium">Phone Number ID</p>
-                    <p className="text-xs text-muted-foreground">WHATSAPP_PHONE_NUMBER_ID secret</p>
-                  </div>
-                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">✓ Set</Badge>
-                </div>
-                <div className="flex items-center justify-between py-2.5">
-                  <div>
-                    <p className="text-sm font-medium">Verify Token</p>
-                    <p className="text-xs text-muted-foreground">WHATSAPP_VERIFY_TOKEN secret</p>
-                  </div>
-                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">✓ Set</Badge>
-                </div>
+                ))}
                 <div className="pt-2">
                   <p className="text-xs text-muted-foreground">To update any secret, go to <span className="font-medium text-foreground">Dashboard → Settings → Environment Variables</span></p>
                 </div>
