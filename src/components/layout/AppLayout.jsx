@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/inbox", icon: MessageSquare, label: "Inbox" },
+  { path: "/inbox", icon: MessageSquare, label: "Inbox", badge: "12" },
   { path: "/leads", icon: Users, label: "Leads" },
   { path: "/calendar", icon: Calendar, label: "Calendar" },
   { path: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
@@ -22,7 +22,7 @@ const navItems = [
   { path: "/settings", icon: Settings, label: "Settings" },
 ];
 
-export default function AppLayout({ children, unreadCount = 0 }) {
+export default function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
 
@@ -85,12 +85,12 @@ export default function AppLayout({ children, unreadCount = 0 }) {
                 {!collapsed && (
                   <span className="text-sm font-medium truncate">{item.label}</span>
                 )}
-                {!collapsed && item.path === "/inbox" && unreadCount > 0 && (
+                {!collapsed && item.badge && (
                   <Badge className="ml-auto bg-primary/20 text-primary text-xs h-4 px-1.5 border-0">
-                    {unreadCount}
+                    {item.badge}
                   </Badge>
                 )}
-                {collapsed && item.path === "/inbox" && unreadCount > 0 && (
+                {collapsed && item.badge && (
                   <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
                 )}
               </Link>

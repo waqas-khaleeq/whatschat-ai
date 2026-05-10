@@ -10,47 +10,18 @@ export default function Inbox() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadConversations = () => {
-    return base44.entities.Conversation.list("-last_message_time", 100)
-      .then((data) => {
-        setConversations(data);
-        return data;
-      })
-      .finally(() => setLoading(false));
-  };
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
-
-    loadConversations().then((data) => {
-      if (id) {
-        const found = data.find((c) => c.id === id);
-        if (found) setSelected(found);
-      }
-    });
-
-    // Real-time subscription for new conversations and updates
-    const unsubscribe = base44.entities.Conversation.subscribe((event) => {
-      if (event.type === "create") {
-        setConversations((prev) => {
-          const exists = prev.find((c) => c.id === event.id);
-          if (exists) return prev;
-          return [event.data, ...prev];
-        });
-      } else if (event.type === "update") {
-        setConversations((prev) =>
-          prev.map((c) => (c.id === event.id ? { ...c, ...event.data } : c))
-            .sort((a, b) => new Date(b.last_message_time || 0) - new Date(a.last_message_time || 0))
-        );
-        setSelected((prev) => prev?.id === event.id ? { ...prev, ...event.data } : prev);
-      } else if (event.type === "delete") {
-        setConversations((prev) => prev.filter((c) => c.id !== event.id));
-        setSelected((prev) => prev?.id === event.id ? null : prev);
-      }
-    });
-
-    return () => unsubscribe();
+    base44.entities.Conversation.list("-last_message_time", 100)
+      .then((data) => {
+        setConversations(data);
+        if (id) {
+          const found = data.find((c) => c.id === id);
+          if (found) setSelected(found);
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const handleSelect = (conv) => {
@@ -76,23 +47,26 @@ export default function Inbox() {
     handleUpdate(updated);
   };
 
-  const totalUnread = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);
-
   return (
-    <AppLayout unreadCount={totalUnread}>
+    <AppLayout>
       <div className="flex h-full overflow-hidden">
+        {/* Left: conversation list */}
         <div className="w-72 shrink-0">
           <ConversationList
             conversations={conversations}
             selectedId={selected?.id}
             onSelect={handleSelect}
-            loading={loading}
+            currentUser="admin"
           />
         </div>
+
+        {/* Center: chat */}
         <ChatArea
           conversation={selected}
           onHandoverChange={handleHandoverChange}
         />
+
+        {/* Right: lead panel */}
         <LeadPanel
           conversation={selected}
           onUpdate={handleUpdate}
