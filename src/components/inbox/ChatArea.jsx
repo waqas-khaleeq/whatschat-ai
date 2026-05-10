@@ -114,7 +114,7 @@ function MessageBubble({ msg, isLast }) {
   );
 }
 
-export default function ChatArea({ conversation, onHandoverChange }) {
+export default function ChatArea({ conversation, onHandoverChange, onShowDetails }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [noteMode, setNoteMode] = useState(false);
@@ -278,6 +278,9 @@ export default function ChatArea({ conversation, onHandoverChange }) {
               <User className="w-3 h-3 mr-1" /> Take Over
             </Button>
           )}
+          <Button size="sm" variant="outline" onClick={onShowDetails} className="text-xs h-7">
+            Details
+          </Button>
           <button className="p-1.5 rounded-lg hover:bg-muted transition-colors">
             <MoreVertical className="w-4 h-4 text-muted-foreground" />
           </button>

@@ -53,7 +53,7 @@ function InfoRow({ label, value, icon: Icon }) {
   );
 }
 
-export default function LeadPanel({ conversation, onUpdate }) {
+export default function LeadPanel({ conversation, onUpdate, onClose }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -114,12 +114,20 @@ export default function LeadPanel({ conversation, onUpdate }) {
               <p className="text-xs text-muted-foreground mt-1">{conversation.customer_phone}</p>
             </div>
           </div>
-          <button
-            onClick={() => { setForm({ ...conversation }); setEditing(!editing); }}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setForm({ ...conversation }); setEditing(!editing); }}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            >
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          </div>
         </div>
         {/* Status */}
         <div className="flex flex-wrap gap-1.5">

@@ -8,6 +8,7 @@ import LeadPanel from "@/components/inbox/LeadPanel";
 export default function Inbox() {
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function Inbox() {
 
   const handleSelect = (conv) => {
     setSelected(conv);
+    setShowDetails(false);
     if (conv.unread_count > 0) {
       base44.entities.Conversation.update(conv.id, { unread_count: 0 });
       setConversations((prev) =>
@@ -69,13 +71,17 @@ export default function Inbox() {
         <ChatArea
           conversation={selected}
           onHandoverChange={handleHandoverChange}
+          onShowDetails={() => setShowDetails(true)}
         />
 
-        {/* Right: lead panel */}
-        <LeadPanel
-          conversation={selected}
-          onUpdate={handleUpdate}
-        />
+        {/* Right: lead panel — only when details open */}
+        {showDetails && (
+          <LeadPanel
+            conversation={selected}
+            onUpdate={handleUpdate}
+            onClose={() => setShowDetails(false)}
+          />
+        )}
       </div>
     </AppLayout>
   );
