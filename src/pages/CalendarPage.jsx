@@ -8,11 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from "date-fns";
 
-const SAMPLE_APPOINTMENTS = [
-  { id: 1, title: "Product Demo - Ahmed Al-Rashid", time: "10:00", duration: 30, date: new Date(), type: "demo", customer: "Ahmed Al-Rashid", phone: "+971 50 123 4567" },
-  { id: 2, title: "Consultation - Sarah Johnson", time: "14:30", duration: 45, date: new Date(), type: "consultation", customer: "Sarah Johnson", phone: "+1 555 234 5678" },
-  { id: 3, title: "Follow-up - Mohamed Hassan", time: "16:00", duration: 20, date: new Date(), type: "followup", customer: "Mohamed Hassan", phone: "+971 55 987 6543" },
-];
+const SAMPLE_APPOINTMENTS = [];
 
 const typeColors = {
   demo: "bg-blue-100 text-blue-700",
@@ -24,32 +20,6 @@ const typeColors = {
 export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date());
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-
-  useEffect(() => {
-    // Check if calendar is already connected by trying to fetch events
-    base44.functions.invoke("fetchCalendarEvents", {})
-      .then(() => setConnected(true))
-      .catch(() => setConnected(false));
-  }, []);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    const connectUrl = await base44.connectors.connectAppUser("googlecalendar-scheduler");
-    const popup = window.open(connectUrl, "_blank", "width=500,height=600");
-    
-    const timer = setInterval(() => {
-      if (!popup || popup.closed) {
-        clearInterval(timer);
-        // Re-check connection after OAuth completes
-        base44.functions.invoke("fetchCalendarEvents", {})
-          .then(() => setConnected(true))
-          .catch(() => setConnected(false))
-          .finally(() => setConnecting(false));
-      }
-    }, 500);
-  };
 
   const days = eachDayOfInterval({
     start: startOfMonth(currentMonth),
@@ -69,35 +39,12 @@ export default function CalendarPage() {
             <h1 className="text-2xl font-bold">Calendar</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Appointment scheduling and availability</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge className={cn(
-              "text-xs",
-              connected 
-                ? "bg-green-50 text-green-700 border-green-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
-            )}>
-              Google Calendar — {connected ? "Connected" : "Not connected"}
-            </Badge>
-            {!connected && (
-              <Button 
-                onClick={handleConnect}
-                disabled={connecting}
-                variant="outline" 
-                size="sm" 
-                className="gap-2"
-              >
-                {connecting ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" /> Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" /> Connect Calendar
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+          <Badge className={cn(
+            "text-xs",
+            "bg-amber-50 text-amber-700 border-amber-200"
+          )}>
+            Google Calendar — Configure in Settings
+          </Badge>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-5">
