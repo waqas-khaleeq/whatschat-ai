@@ -64,6 +64,21 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     setMessages([]);
     base44.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 100)
       .then(setMessages);
+
+    // Subscribe to real-time message updates
+    const unsubscribe = base44.entities.Message.subscribe((event) => {
+      if (event.data?.conversation_id === conversation.id) {
+        if (event.type === "create") {
+          setMessages((prev) => [...prev, event.data]);
+        } else if (event.type === "update") {
+          setMessages((prev) => prev.map((m) => (m.id === event.id ? event.data : m)));
+        } else if (event.type === "delete") {
+          setMessages((prev) => prev.filter((m) => m.id !== event.id));
+        }
+      }
+    });
+
+    return unsubscribe;
   }, [conversation?.id]);
 
   useEffect(() => {

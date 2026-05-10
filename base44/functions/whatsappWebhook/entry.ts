@@ -211,7 +211,7 @@ Reply only with your response message, nothing else.`,
         });
 
         // Send via WhatsApp Cloud API
-        await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+        const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${ACCESS_TOKEN}`,
@@ -225,6 +225,9 @@ Reply only with your response message, nothing else.`,
           }),
         });
 
+        const sendData = await sendRes.json();
+        const status = sendRes.ok ? "sent" : "failed";
+
         // Save AI reply as message
         await base44.asServiceRole.entities.Message.create({
           conversation_id: conversation.id,
@@ -232,7 +235,8 @@ Reply only with your response message, nothing else.`,
           content: aiReply,
           message_type: "text",
           timestamp: new Date().toISOString(),
-          status: "sent",
+          status: status,
+          whatsapp_message_id: sendData.messages?.[0]?.id,
         });
 
         await base44.asServiceRole.entities.Conversation.update(conversation.id, {
