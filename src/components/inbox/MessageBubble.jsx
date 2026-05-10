@@ -39,10 +39,22 @@ export default function MessageBubble({ msg }) {
 
   const renderStatus = () => {
     if (isCustomer) return null;
-    if (msg.status === "read") return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
-    if (msg.status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-white/60" />;
-    if (msg.status === "failed") return <AlertCircle className="w-3.5 h-3.5 text-red-300" />;
-    return <Check className="w-3.5 h-3.5 text-white/60" />;
+    if (!isSent) return null;
+    
+    if (msg.status === "read" || msg.is_approved) {
+      return <CheckCheck className="w-4 h-4 text-[#53bdeb]" />;
+    }
+    if (msg.status === "delivered") {
+      return <CheckCheck className="w-4 h-4 text-white/70" />;
+    }
+    if (msg.status === "sent" || msg.status === "sending") {
+      return <Check className="w-4 h-4 text-white/70" />;
+    }
+    if (msg.status === "failed") {
+      return <AlertCircle className="w-4 h-4 text-red-400" />;
+    }
+    // Default to single tick for agent messages
+    return <Check className="w-4 h-4 text-white/70" />;
   };
 
   const renderContent = () => {
@@ -56,10 +68,12 @@ export default function MessageBubble({ msg }) {
               className="max-w-[260px] max-h-[200px] w-full object-cover block"
             />
             {msg.content && msg.content !== msg.media_name && (
-              <p className="text-sm mt-1.5 px-0.5 leading-relaxed">{msg.content}</p>
+              <p className="text-sm mt-1.5 px-0.5 leading-relaxed text-white">{msg.content}</p>
             )}
-            <div className={cn("flex items-center justify-end gap-1 mt-1", isSent ? "text-white/70" : "text-[#667781]")}>
-              <span className="text-[11px]">{timeStr}</span>
+            <div className={cn("flex items-center justify-end gap-0.5 mt-1", isSent ? "" : "")}>
+              <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                {timeStr}
+              </span>
               {renderStatus()}
             </div>
           </div>
@@ -74,10 +88,10 @@ export default function MessageBubble({ msg }) {
               className="max-w-[260px] max-h-[200px] w-full rounded-lg block"
             />
             {msg.content && msg.content !== msg.media_name && (
-              <p className="text-sm mt-1.5 leading-relaxed">{msg.content}</p>
+              <p className="text-sm mt-1.5 leading-relaxed text-white">{msg.content}</p>
             )}
-            <div className={cn("flex items-center justify-end gap-1 mt-1", isSent ? "text-white/70" : "text-[#667781]")}>
-              <span className="text-[11px]">{timeStr}</span>
+            <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
+              <span className="text-[11px] text-white/60">{timeStr}</span>
               {renderStatus()}
             </div>
           </div>
@@ -94,8 +108,10 @@ export default function MessageBubble({ msg }) {
             </div>
             <div className="flex-1 min-w-0">
               <audio src={msg.media_url} controls className="w-full h-8" />
-              <div className={cn("flex items-center justify-end gap-1 mt-0.5", isSent ? "text-white/70" : "text-[#667781]")}>
-                <span className="text-[11px]">{timeStr}</span>
+              <div className={cn("flex items-center justify-end gap-0.5 mt-0.5")}>
+                <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                  {timeStr}
+                </span>
                 {renderStatus()}
               </div>
             </div>
@@ -122,8 +138,10 @@ export default function MessageBubble({ msg }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate leading-none">{msg.media_name || msg.content || "Document"}</p>
               <p className={cn("text-[11px] mt-0.5", isSent ? "text-white/60" : "text-[#667781]")}>Tap to open</p>
-              <div className={cn("flex items-center justify-end gap-1 mt-1", isSent ? "text-white/70" : "text-[#667781]")}>
-                <span className="text-[11px]">{timeStr}</span>
+              <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
+                <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                  {timeStr}
+                </span>
                 {renderStatus()}
               </div>
             </div>
@@ -135,10 +153,12 @@ export default function MessageBubble({ msg }) {
           <div>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
             <div className={cn(
-              "flex items-center justify-end gap-1 mt-0.5",
-              isSent ? "text-white/70" : "text-[#667781]"
+              "flex items-center justify-end gap-0.5 mt-1",
+              isSent ? "" : ""
             )}>
-              <span className="text-[11px]">{timeStr}</span>
+              <span className={cn("text-[11px]", isSent ? "text-white/60" : "text-[#667781]")}>
+                {timeStr}
+              </span>
               {renderStatus()}
             </div>
           </div>
