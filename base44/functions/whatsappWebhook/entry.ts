@@ -82,10 +82,16 @@ Deno.serve(async (req) => {
     }
 
     for (const message of value.messages) {
+      // Skip non-text messages and status updates
+      if (message.type && message.type !== "text") continue;
+
       const phone = message.from;
       const text = message.text?.body || "";
       const waMessageId = message.id;
       const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
+
+      // Skip empty messages
+      if (!text.trim()) continue;
 
       // Find or create conversation
       let conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
