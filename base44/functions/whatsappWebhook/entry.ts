@@ -31,6 +31,9 @@ Deno.serve(async (req) => {
 
     // Handle test message from Settings page
     if (body._test && body.phone) {
+      console.log("PHONE_NUMBER_ID:", PHONE_NUMBER_ID);
+      console.log("ACCESS_TOKEN exists:", !!ACCESS_TOKEN);
+      console.log("Sending to:", body.phone);
       const testRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
         method: "POST",
         headers: {
@@ -45,8 +48,9 @@ Deno.serve(async (req) => {
         }),
       });
       const testData = await testRes.json();
-      if (!testRes.ok) return Response.json({ error: testData.error?.message || "Failed" }, { status: 400 });
-      return Response.json({ success: true });
+      console.log("WhatsApp API response:", JSON.stringify(testData));
+      if (!testRes.ok) return Response.json({ error: testData.error?.message || "Failed", details: testData }, { status: 400 });
+      return Response.json({ success: true, data: testData });
     }
 
     const entry = body?.entry?.[0];
