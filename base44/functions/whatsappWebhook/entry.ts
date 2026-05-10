@@ -44,20 +44,42 @@ Deno.serve(async (req) => {
       return Response.json({ connected: false, reason: checkData.error?.message || "Invalid credentials" });
     }
 
-    // Handle manual agent send
-    if (body._send && body.phone && body.message) {
+    // Handle manual agent send (text or media)
+    if (body._send && body.phone) {
+      let msgPayload;
+
+      if (body.media_url && body.media_type) {
+        // Media message
+        const typeMap = { image: "image", video: "video", document: "document", audio: "audio" };
+        const waType = typeMap[body.media_type] || "document";
+        const mediaObj = { link: body.media_url };
+        if (body.media_type === "document" && body.media_name) mediaObj.filename = body.media_name;
+        if (body.caption) mediaObj.caption = body.caption;
+        msgPayload = {
+          messaging_product: "whatsapp",
+          to: body.phone,
+          type: waType,
+          [waType]: mediaObj,
+        };
+      } else if (body.message) {
+        // Text message
+        msgPayload = {
+          messaging_product: "whatsapp",
+          to: body.phone,
+          type: "text",
+          text: { body: body.message },
+        };
+      } else {
+        return Response.json({ error: "No message or media provided" }, { status: 400 });
+      }
+
       const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${ACCESS_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: body.phone,
-          type: "text",
-          text: { body: body.message },
-        }),
+        body: JSON.stringify(msgPayload),
       });
       const sendData = await sendRes.json();
       if (!sendRes.ok) return Response.json({ error: sendData.error?.message || "Failed" }, { status: 400 });

@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import {
-  Send, Paperclip, Smile, Bot, User, MoreVertical, Phone, Video,
-  CheckCheck, Check, Clock, AlertCircle, FileText, Image, Mic,
-  StickyNote, Zap, ChevronDown, X
+  Send, Bot, User, MoreVertical,
+  CheckCheck, Check, AlertCircle, FileText,
+  StickyNote, Zap, X, Paperclip, Mic, Square,
+  Image, Film, Volume2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import MessageBubble from "./MessageBubble";
+import MediaPreview from "./MediaPreview";
 
 const QUICK_REPLIES = [
   "Thank you for reaching out! How can I help you today?",
@@ -17,110 +19,17 @@ const QUICK_REPLIES = [
   "Our team will get back to you within 24 hours.",
 ];
 
-function MessageBubble({ msg, isLast }) {
-  const isCustomer = msg.sender === "customer";
-  const isSystem = msg.sender === "system";
-  const isNote = msg.message_type === "internal_note";
-
-  if (isSystem) {
-    return (
-      <div className="flex justify-center my-2">
-        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-          {msg.content}
-        </span>
-      </div>
-    );
-  }
-
-  if (isNote) {
-    return (
-      <div className="flex justify-center my-2">
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-sm">
-          <div className="flex items-center gap-1.5 mb-1">
-            <StickyNote className="w-3 h-3 text-amber-600" />
-            <span className="text-xs font-medium text-amber-700">Internal Note</span>
-            {msg.agent_name && <span className="text-xs text-amber-600">· {msg.agent_name}</span>}
-          </div>
-          <p className="text-xs text-amber-800">{msg.content}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={cn("flex items-end gap-2 mb-1", isCustomer ? "justify-start" : "justify-end")}>
-      {isCustomer && (
-        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mb-1">
-          <span className="text-[10px] font-bold text-primary">C</span>
-        </div>
-      )}
-      <div className={cn("max-w-[68%] group")}>
-        {!isCustomer && msg.sender === "ai" && (
-          <div className="flex items-center gap-1 mb-1 justify-end">
-            <Bot className="w-3 h-3 text-blue-500" />
-            <span className="text-[10px] text-blue-500 font-medium">AI Agent</span>
-          </div>
-        )}
-        {!isCustomer && msg.sender === "agent" && msg.agent_name && (
-          <div className="flex items-center gap-1 mb-1 justify-end">
-            <User className="w-3 h-3 text-amber-500" />
-            <span className="text-[10px] text-amber-500 font-medium">{msg.agent_name}</span>
-          </div>
-        )}
-        <div className={cn(
-          "px-3 py-2 shadow-sm",
-          isCustomer ? "wa-incoming-bubble" : "wa-outgoing-bubble",
-          msg.is_ai_draft && "border-2 border-blue-200 border-dashed"
-        )}>
-          {msg.is_ai_draft && (
-            <div className="flex items-center gap-1 mb-1.5 pb-1.5 border-b border-blue-200">
-              <Bot className="w-3 h-3 text-blue-500" />
-              <span className="text-[10px] text-blue-500 font-semibold">AI Draft — Pending approval</span>
-            </div>
-          )}
-          {msg.message_type === "image" ? (
-            <div>
-              <img src={msg.media_url} alt="img" className="rounded-lg max-w-full mb-1" />
-              {msg.content && <p className="text-sm">{msg.content}</p>}
-            </div>
-          ) : msg.message_type === "document" ? (
-            <div className="flex items-center gap-2">
-              <FileText className="w-8 h-8 text-blue-500" />
-              <div>
-                <p className="text-sm font-medium">{msg.media_name || "Document"}</p>
-                <p className="text-xs text-muted-foreground">Tap to open</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-          )}
-        </div>
-        <div className={cn(
-          "flex items-center gap-1 mt-0.5 px-1",
-          isCustomer ? "justify-start" : "justify-end"
-        )}>
-          <span className="text-[10px] text-muted-foreground">
-            {msg.timestamp ? format(new Date(msg.timestamp), "HH:mm") : ""}
-          </span>
-          {!isCustomer && msg.status !== undefined && (
-            msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" />
-            : msg.status === "delivered" ? <CheckCheck className="w-3 h-3 text-muted-foreground" />
-            : msg.status === "failed" ? <AlertCircle className="w-3 h-3 text-destructive" />
-            : <Check className="w-3 h-3 text-muted-foreground" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ChatArea({ conversation, onHandoverChange, onShowDetails }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [noteMode, setNoteMode] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [sending, setSending] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState(null); // { file, url, type, name }
+  const [recording, setRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -133,14 +42,88 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Detect media type from file
+  const getMediaType = (file) => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("audio/")) return "audio";
+    return "document";
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setMediaPreview({ file, url, type: getMediaType(file), name: file.name });
+    e.target.value = "";
+  };
+
+  const handleVoiceRecord = async () => {
+    if (recording) {
+      mediaRecorder?.stop();
+      setRecording(false);
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mr = new MediaRecorder(stream);
+    const chunks = [];
+    mr.ondataavailable = (e) => chunks.push(e.data);
+    mr.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" });
+      const url = URL.createObjectURL(blob);
+      const file = new File([blob], "voice-message.ogg", { type: blob.type });
+      setMediaPreview({ file, url, type: "audio", name: "Voice Message" });
+    };
+    mr.start();
+    setMediaRecorder(mr);
+    setRecording(true);
+  };
+
+  const sendMedia = async () => {
+    if (!mediaPreview || !conversation) return;
+    setSending(true);
+    // Upload file first
+    const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
+    // Send via WhatsApp
+    const res = await base44.functions.invoke("whatsappWebhook", {
+      _send: true,
+      phone: conversation.customer_phone,
+      media_url: file_url,
+      media_type: mediaPreview.type,
+      media_name: mediaPreview.name,
+      caption: input.trim() || undefined,
+    });
+    const status = res?.data?.success ? "sent" : "failed";
+    const created = await base44.entities.Message.create({
+      conversation_id: conversation.id,
+      sender: "agent",
+      message_type: mediaPreview.type === "audio" ? "audio" : mediaPreview.type === "video" ? "video" : mediaPreview.type === "image" ? "image" : "document",
+      content: input.trim() || mediaPreview.name,
+      media_url: file_url,
+      media_name: mediaPreview.name,
+      timestamp: new Date().toISOString(),
+      status,
+      agent_name: "You",
+    });
+    setMessages((prev) => [...prev, created]);
+    await base44.entities.Conversation.update(conversation.id, {
+      last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
+      last_message_time: new Date().toISOString(),
+    });
+    setMediaPreview(null);
+    setInput("");
+    setSending(false);
+  };
+
   const sendMessage = async () => {
+    if (mediaPreview) { await sendMedia(); return; }
     if (!input.trim() || !conversation) return;
     setSending(true);
     const content = input.trim();
     setInput("");
 
     if (noteMode) {
-      // Internal note — only saved to DB, not sent via WhatsApp
       const created = await base44.entities.Message.create({
         conversation_id: conversation.id,
         sender: "system",
@@ -156,13 +139,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         last_message_time: new Date().toISOString(),
       });
     } else {
-      // Real WhatsApp message — send via API first
       const res = await base44.functions.invoke("whatsappWebhook", {
         _send: true,
         phone: conversation.customer_phone,
         message: content,
       });
-
       const status = res?.data?.success ? "sent" : "failed";
       const created = await base44.entities.Message.create({
         conversation_id: conversation.id,
@@ -179,7 +160,6 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         last_message_time: new Date().toISOString(),
       });
     }
-
     setSending(false);
   };
 
@@ -201,9 +181,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   };
 
   const handleReturnToAI = async () => {
-    await base44.entities.Conversation.update(conversation.id, {
-      handling_mode: "ai",
-    });
+    await base44.entities.Conversation.update(conversation.id, { handling_mode: "ai" });
     const sysMsg = await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "system",
@@ -233,7 +211,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Chat Header */}
+      {/* Header */}
       <div className="h-14 bg-[hsl(var(--wa-header))] border-b border-border px-4 flex items-center justify-between shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -251,22 +229,18 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
               {conversation.customer_name || conversation.customer_phone}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {conversation.customer_phone}
-              {conversation.is_online && " · Online"}
+              {conversation.customer_phone}{conversation.is_online && " · Online"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* AI/Human mode badge */}
           {isHuman ? (
             <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-amber-200">
-              <User className="w-3 h-3" />
-              Human Mode
+              <User className="w-3 h-3" /> Human Mode
             </div>
           ) : (
             <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-200">
-              <Bot className="w-3 h-3" />
-              AI Mode
+              <Bot className="w-3 h-3" /> AI Mode
             </div>
           )}
           {isHuman ? (
@@ -278,9 +252,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
               <User className="w-3 h-3 mr-1" /> Take Over
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={onShowDetails} className="text-xs h-7">
-            Details
-          </Button>
+          <Button size="sm" variant="outline" onClick={onShowDetails} className="text-xs h-7">Details</Button>
           <button className="p-1.5 rounded-lg hover:bg-muted transition-colors">
             <MoreVertical className="w-4 h-4 text-muted-foreground" />
           </button>
@@ -288,14 +260,14 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-0 wa-bg">
+      <div className="flex-1 overflow-y-auto p-4 wa-bg">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-muted-foreground">No messages yet</p>
           </div>
         ) : (
           messages.map((msg, i) => (
-            <MessageBubble key={msg.id || i} msg={msg} isLast={i === messages.length - 1} />
+            <MessageBubble key={msg.id || i} msg={msg} />
           ))
         )}
         <div ref={bottomRef} />
@@ -324,9 +296,19 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         </div>
       )}
 
-      {/* Input */}
+      {/* Media preview bar */}
+      {mediaPreview && (
+        <MediaPreview
+          preview={mediaPreview}
+          onCancel={() => setMediaPreview(null)}
+          caption={input}
+          onCaptionChange={setInput}
+        />
+      )}
+
+      {/* Input area */}
       <div className="bg-[hsl(var(--wa-header))] border-t border-border px-3 py-2.5 shrink-0">
-        {noteMode && (
+        {noteMode && !mediaPreview && (
           <div className="flex items-center gap-1.5 mb-2 px-1">
             <StickyNote className="w-3 h-3 text-amber-500" />
             <span className="text-xs text-amber-600 font-medium">Internal note — not visible to customer</span>
@@ -335,40 +317,92 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
             </button>
           </div>
         )}
+        {recording && (
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-xs text-red-600 font-medium">Recording voice message... tap mic to stop</span>
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          {/* Quick replies */}
           <button
             onClick={() => setShowQuickReplies(!showQuickReplies)}
             className="p-2 rounded-full hover:bg-muted transition-colors shrink-0"
+            title="Quick replies"
           >
             <Zap className="w-4 h-4 text-muted-foreground" />
           </button>
-          <button
-            onClick={() => setNoteMode(!noteMode)}
-            className={cn(
-              "p-2 rounded-full transition-colors shrink-0",
-              noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-muted text-muted-foreground"
-            )}
-          >
-            <StickyNote className="w-4 h-4" />
-          </button>
-          <div className={cn(
-            "flex-1 rounded-2xl border px-4 py-2 flex items-end gap-2",
-            noteMode ? "bg-amber-50 border-amber-200" : "bg-white border-border"
-          )}>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-              }}
-              placeholder={noteMode ? "Write an internal note..." : "Type a message..."}
-              className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed max-h-24 overflow-y-auto placeholder:text-muted-foreground"
-              rows={1}
-            />
-          </div>
+
+          {/* Note mode */}
+          {!mediaPreview && (
+            <button
+              onClick={() => setNoteMode(!noteMode)}
+              className={cn("p-2 rounded-full transition-colors shrink-0",
+                noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-muted text-muted-foreground"
+              )}
+              title="Internal note"
+            >
+              <StickyNote className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Attach file */}
+          {!noteMode && !mediaPreview && (
+            <>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 rounded-full hover:bg-muted transition-colors shrink-0"
+                title="Attach image, video or document"
+              >
+                <Paperclip className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </>
+          )}
+
+          {/* Text input (hidden when media is ready to send) */}
+          {!mediaPreview && (
+            <div className={cn(
+              "flex-1 rounded-2xl border px-4 py-2 flex items-end gap-2",
+              noteMode ? "bg-amber-50 border-amber-200" : "bg-white border-border"
+            )}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                }}
+                placeholder={noteMode ? "Write an internal note..." : "Type a message..."}
+                className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed max-h-24 overflow-y-auto placeholder:text-muted-foreground"
+                rows={1}
+              />
+            </div>
+          )}
+
+          {/* Voice record (only when no text/media) */}
+          {!noteMode && !mediaPreview && !input.trim() && (
+            <button
+              onClick={handleVoiceRecord}
+              className={cn(
+                "p-2 rounded-full transition-colors shrink-0",
+                recording ? "bg-red-100 text-red-600 animate-pulse" : "hover:bg-muted text-muted-foreground"
+              )}
+              title={recording ? "Stop recording" : "Record voice message"}
+            >
+              {recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          )}
+
+          {/* Send button */}
           <button
             onClick={sendMessage}
-            disabled={!input.trim() || sending}
+            disabled={(!input.trim() && !mediaPreview) || sending}
             className="w-10 h-10 bg-primary rounded-full flex items-center justify-center shrink-0 disabled:opacity-40 hover:bg-primary/90 transition-colors shadow-sm"
           >
             <Send className="w-4 h-4 text-white" />
