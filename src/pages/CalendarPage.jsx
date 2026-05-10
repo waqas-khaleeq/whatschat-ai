@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
 import AppLayout from "@/components/layout/AppLayout";
-import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, MapPin, User } from "lucide-react";
+import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, MapPin, User, Loader } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,32 @@ const typeColors = {
 export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date());
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => {
+    // Check if calendar is already connected by trying to fetch events
+    base44.functions.invoke("fetchCalendarEvents", {})
+      .then(() => setConnected(true))
+      .catch(() => setConnected(false));
+  }, []);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    const connectUrl = await base44.connectors.connectAppUser("googlecalendar-scheduler");
+    const popup = window.open(connectUrl, "_blank", "width=500,height=600");
+    
+    const timer = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(timer);
+        // Re-check connection after OAuth completes
+        base44.functions.invoke("fetchCalendarEvents", {})
+          .then(() => setConnected(true))
+          .catch(() => setConnected(false))
+          .finally(() => setConnecting(false));
+      }
+    }, 500);
+  };
 
   const days = eachDayOfInterval({
     start: startOfMonth(currentMonth),
@@ -43,12 +70,33 @@ export default function CalendarPage() {
             <p className="text-sm text-muted-foreground mt-0.5">Appointment scheduling and availability</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-              Google Calendar — Not connected
+            <Badge className={cn(
+              "text-xs",
+              connected 
+                ? "bg-green-50 text-green-700 border-green-200"
+                : "bg-amber-50 text-amber-700 border-amber-200"
+            )}>
+              Google Calendar — {connected ? "Connected" : "Not connected"}
             </Badge>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Plus className="w-4 h-4" /> Connect Calendar
-            </Button>
+            {!connected && (
+              <Button 
+                onClick={handleConnect}
+                disabled={connecting}
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+              >
+                {connecting ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" /> Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" /> Connect Calendar
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
