@@ -69,7 +69,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     const unsubscribe = base44.entities.Message.subscribe((event) => {
       if (event.data?.conversation_id === conversation.id) {
         if (event.type === "create") {
-          setMessages((prev) => [...prev, event.data]);
+          setMessages((prev) => {
+            // Avoid duplicates if message already exists
+            if (prev.some((m) => m.id === event.id)) return prev;
+            return [...prev, event.data];
+          });
         } else if (event.type === "update") {
           setMessages((prev) => prev.map((m) => (m.id === event.id ? event.data : m)));
         } else if (event.type === "delete") {
