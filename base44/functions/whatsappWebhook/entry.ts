@@ -29,6 +29,26 @@ Deno.serve(async (req) => {
       return Response.json({ verifyToken: VERIFY_TOKEN });
     }
 
+    // Handle manual agent send
+    if (body._send && body.phone && body.message) {
+      const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: body.phone,
+          type: "text",
+          text: { body: body.message },
+        }),
+      });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) return Response.json({ error: sendData.error?.message || "Failed" }, { status: 400 });
+      return Response.json({ success: true, data: sendData });
+    }
+
     // Handle test message from Settings page
     if (body._test && body.phone) {
       console.log("PHONE_NUMBER_ID:", PHONE_NUMBER_ID);
@@ -105,9 +125,32 @@ Deno.serve(async (req) => {
 
       // If AI mode — send an auto-reply via WhatsApp API
       if (conversation.handling_mode !== "human" && text) {
-        // Generate AI reply
+        // Fetch recent chat history for context (last 20 messages)
+        const history = await base44.asServiceRole.entities.Message.filter(
+          { conversation_id: conversation.id },
+          "timestamp",
+          20
+        );
+
+        // Build conversation history string
+        const historyText = history
+          .filter(m => m.message_type !== "internal_note")
+          .map(m => {
+            const role = m.sender === "customer" ? "Customer" : "Assistant";
+            return `${role}: ${m.content}`;
+          })
+          .join("\n");
+
+        // Generate AI reply with context
         const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
-          prompt: `You are a helpful business assistant on WhatsApp. Reply concisely to this customer message: "${text}"`,
+          prompt: `You are a helpful business assistant on WhatsApp. Reply concisely to the customer's latest message, taking into account the conversation history below.
+
+Conversation history:
+${historyText}
+
+Customer's latest message: "${text}"
+
+Reply only with your response, nothing else.`,
         });
 
         // Send via WhatsApp Cloud API
