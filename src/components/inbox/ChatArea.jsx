@@ -466,24 +466,20 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         )}
 
         {/* Send or Mic */}
-        {!mediaPreview && !input.trim() && !noteMode ? (
+        {!mediaPreview && input.trim().length === 0 && !noteMode && !recording ? (
           <button
             onClick={handleVoiceRecord}
-            className={cn(
-              "w-11 h-11 rounded-full flex items-center justify-center transition-colors shadow-sm shrink-0",
-              recording
-                ? "bg-red-500 hover:bg-red-600 text-white animate-pulse"
-                : "bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
-            )}
-            title={recording ? "Stop recording" : "Record voice"}
+            className="w-11 h-11 rounded-full flex items-center justify-center transition-colors shadow-sm shrink-0 bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
+            title="Record voice message"
           >
-            {recording ? <Square className="w-4 h-4" /> : <Mic className="w-5 h-5" />}
+            <Mic className="w-5 h-5" />
           </button>
         ) : (
           <button
             onClick={sendMessage}
-            disabled={(!input.trim() && !mediaPreview) || sending}
-            className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center shrink-0 disabled:opacity-40 transition-colors shadow-sm"
+            disabled={(input.trim().length === 0 && !mediaPreview) || sending}
+            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-[#128c7e] hover:bg-[#0f7a6d] hover:disabled:bg-[#128c7e] text-white"
+            title="Send message"
           >
             <Send className="w-5 h-5 text-white ml-0.5" />
           </button>
