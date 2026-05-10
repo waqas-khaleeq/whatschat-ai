@@ -102,9 +102,10 @@ function MessageBubble({ msg, isLast }) {
           <span className="text-[10px] text-muted-foreground">
             {msg.timestamp ? format(new Date(msg.timestamp), "HH:mm") : ""}
           </span>
-          {!isCustomer && (
+          {!isCustomer && msg.status !== undefined && (
             msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" />
             : msg.status === "delivered" ? <CheckCheck className="w-3 h-3 text-muted-foreground" />
+            : msg.status === "failed" ? <AlertCircle className="w-3 h-3 text-destructive" />
             : <Check className="w-3 h-3 text-muted-foreground" />
           )}
         </div>
@@ -135,22 +136,50 @@ export default function ChatArea({ conversation, onHandoverChange }) {
   const sendMessage = async () => {
     if (!input.trim() || !conversation) return;
     setSending(true);
-    const msg = {
-      conversation_id: conversation.id,
-      sender: noteMode ? "system" : "agent",
-      message_type: noteMode ? "internal_note" : "text",
-      content: input.trim(),
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      agent_name: "You",
-    };
-    const created = await base44.entities.Message.create(msg);
-    setMessages((prev) => [...prev, created]);
-    await base44.entities.Conversation.update(conversation.id, {
-      last_message: noteMode ? "[Note] " + input.trim() : input.trim(),
-      last_message_time: new Date().toISOString(),
-    });
+    const content = input.trim();
     setInput("");
+
+    if (noteMode) {
+      // Internal note — only saved to DB, not sent via WhatsApp
+      const created = await base44.entities.Message.create({
+        conversation_id: conversation.id,
+        sender: "system",
+        message_type: "internal_note",
+        content,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        agent_name: "You",
+      });
+      setMessages((prev) => [...prev, created]);
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: "[Note] " + content,
+        last_message_time: new Date().toISOString(),
+      });
+    } else {
+      // Real WhatsApp message — send via API first
+      const res = await base44.functions.invoke("whatsappWebhook", {
+        _send: true,
+        phone: conversation.customer_phone,
+        message: content,
+      });
+
+      const status = res?.data?.success ? "sent" : "failed";
+      const created = await base44.entities.Message.create({
+        conversation_id: conversation.id,
+        sender: "agent",
+        message_type: "text",
+        content,
+        timestamp: new Date().toISOString(),
+        status,
+        agent_name: "You",
+      });
+      setMessages((prev) => [...prev, created]);
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: content,
+        last_message_time: new Date().toISOString(),
+      });
+    }
+
     setSending(false);
   };
 
