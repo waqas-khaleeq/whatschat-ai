@@ -141,6 +141,13 @@ Deno.serve(async (req) => {
       const waMessageId = message.id;
       const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
 
+      // ── DEDUPLICATION FIRST: skip if we already processed this WhatsApp message ID ──
+      const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
+      if (existingMsgs.length > 0) {
+        console.log(`Duplicate message ${waMessageId}, skipping.`);
+        continue;
+      }
+
       // Handle different message types
       let messageType = "text";
       let content = "";
@@ -202,10 +209,6 @@ Deno.serve(async (req) => {
           unread_count: (conversation.unread_count || 0) + 1,
         });
       }
-
-      // Deduplicate: skip if we already processed this WhatsApp message ID
-      const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
-      if (existingMsgs.length > 0) continue;
 
       // Save message
       await base44.asServiceRole.entities.Message.create({
