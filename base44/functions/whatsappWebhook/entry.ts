@@ -46,10 +46,12 @@ Deno.serve(async (req) => {
 
     // Handle manual agent send (text or media)
     if (body._send && body.phone) {
+      // Normalize phone: remove +, spaces, dashes — WhatsApp API needs digits only with country code
+      const toPhone = String(body.phone).replace(/[^\d]/g, "");
+
       let msgPayload;
 
       if (body.media_url && body.media_type) {
-        // Media message
         const typeMap = { image: "image", video: "video", document: "document", audio: "audio" };
         const waType = typeMap[body.media_type] || "document";
         const mediaObj = { link: body.media_url };
@@ -57,15 +59,14 @@ Deno.serve(async (req) => {
         if (body.caption) mediaObj.caption = body.caption;
         msgPayload = {
           messaging_product: "whatsapp",
-          to: body.phone,
+          to: toPhone,
           type: waType,
           [waType]: mediaObj,
         };
       } else if (body.message) {
-        // Text message
         msgPayload = {
           messaging_product: "whatsapp",
-          to: body.phone,
+          to: toPhone,
           type: "text",
           text: { body: body.message },
         };
@@ -73,6 +74,7 @@ Deno.serve(async (req) => {
         return Response.json({ error: "No message or media provided" }, { status: 400 });
       }
 
+      console.log("Sending to phone:", toPhone, "Payload:", JSON.stringify(msgPayload));
       const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
         method: "POST",
         headers: {
@@ -82,7 +84,8 @@ Deno.serve(async (req) => {
         body: JSON.stringify(msgPayload),
       });
       const sendData = await sendRes.json();
-      if (!sendRes.ok) return Response.json({ error: sendData.error?.message || "Failed" }, { status: 400 });
+      console.log("WhatsApp send response:", JSON.stringify(sendData));
+      if (!sendRes.ok) return Response.json({ success: false, error: sendData.error?.message || "Failed", details: sendData }, { status: 400 });
       return Response.json({ success: true, data: sendData });
     }
 

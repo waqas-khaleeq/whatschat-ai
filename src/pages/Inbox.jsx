@@ -4,12 +4,14 @@ import AppLayout from "@/components/layout/AppLayout";
 import ConversationList from "@/components/inbox/ConversationList";
 import ChatArea from "@/components/inbox/ChatArea";
 import LeadPanel from "@/components/inbox/LeadPanel";
+import NewChatModal from "@/components/inbox/NewChatModal";
 
 export default function Inbox() {
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showNewChat, setShowNewChat] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -54,6 +56,16 @@ export default function Inbox() {
     handleUpdate(updated);
   };
 
+  const handleNewConversation = (conv) => {
+    setConversations((prev) => {
+      const exists = prev.find((c) => c.id === conv.id);
+      if (exists) return prev;
+      return [conv, ...prev];
+    });
+    setSelected(conv);
+    setShowDetails(false);
+  };
+
   return (
     <AppLayout>
       <div className="flex h-full overflow-hidden">
@@ -64,6 +76,7 @@ export default function Inbox() {
             selectedId={selected?.id}
             onSelect={handleSelect}
             currentUser="admin"
+            onNewChat={() => setShowNewChat(true)}
           />
         </div>
 
@@ -83,6 +96,13 @@ export default function Inbox() {
           />
         )}
       </div>
+
+      {showNewChat && (
+        <NewChatModal
+          onClose={() => setShowNewChat(false)}
+          onConversationCreated={handleNewConversation}
+        />
+      )}
     </AppLayout>
   );
 }

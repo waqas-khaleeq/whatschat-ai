@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Bot, User, Filter } from "lucide-react";
+import { Search, Bot, User, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, isToday, format } from "date-fns";
 
@@ -18,7 +18,7 @@ function timeLabel(ts) {
   return formatDistanceToNow(d, { addSuffix: false });
 }
 
-export default function ConversationList({ conversations, selectedId, onSelect, currentUser }) {
+export default function ConversationList({ conversations, selectedId, onSelect, currentUser, onNewChat }) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
 
@@ -44,10 +44,17 @@ export default function ConversationList({ conversations, selectedId, onSelect, 
       <div className="bg-[#f0f2f5] px-4 py-3 border-b border-[#e9edef] shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-[#111b21]">Chats</h2>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <span className="text-[11px] bg-[#128c7e]/10 text-[#128c7e] font-semibold px-2 py-0.5 rounded-full">
               {conversations.length}
             </span>
+            <button
+              onClick={onNewChat}
+              className="w-8 h-8 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center transition-colors shadow-sm"
+              title="New chat"
+            >
+              <MessageSquarePlus className="w-4 h-4 text-white" />
+            </button>
           </div>
         </div>
         {/* Search */}
