@@ -1,8 +1,9 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest, createClient } from 'npm:@base44/sdk@0.8.25';
 
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
 const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
 const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+const APP_ID = Deno.env.get("BASE44_APP_ID");
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -21,7 +22,11 @@ Deno.serve(async (req) => {
 
   // ── POST: incoming messages / test ────────────────────────────────────────
   if (req.method === "POST") {
-    const base44 = createClientFromRequest(req);
+    // Use request-based client for authenticated frontend calls,
+    // but always have a service-role client for webhook/unauthenticated calls
+    const reqClient = createClientFromRequest(req);
+    const serviceClient = createClient({ appId: APP_ID });
+    const base44 = serviceClient; // default to service role
     const body = await req.json();
 
     // Return verify token for Settings page display
