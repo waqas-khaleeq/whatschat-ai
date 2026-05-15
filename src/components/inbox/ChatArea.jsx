@@ -66,7 +66,6 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     base44.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 100)
       .then(msgs => {
         setMessages(msgs || []);
-        // Scroll to bottom after loading
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       })
       .catch(err => {
@@ -74,31 +73,22 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         setMessages([]);
       });
 
-    // Subscribe to ALL message changes in real-time
+    // Subscribe to real-time changes
     const unsubscribe = base44.entities.Message.subscribe((event) => {
-      // Only process messages from this conversation
-      if (event.data?.conversation_id === conversation.id) {
-        if (event.type === "create") {
-          setMessages((prev) => {
-            // Check if message already exists by ID
-            const exists = prev.some((m) => m.id === event.data.id);
-            if (exists) return prev;
-            // Add new message
-            const updated = [...prev, event.data];
-            // Auto-scroll after new message
-            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-            return updated;
-          });
-        } else if (event.type === "update") {
-          setMessages((prev) => {
-            const updated = prev.map((m) => (m.id === event.data.id ? event.data : m));
-            // Auto-scroll on status update
-            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-            return updated;
-          });
-        } else if (event.type === "delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== event.data.id));
-        }
+      if (event.data?.conversation_id !== conversation.id) return;
+
+      if (event.type === "create") {
+        setMessages((prev) => {
+          // Deduplicate: skip if already exists (by id OR by optimistic temp matching content+sender)
+          if (prev.some((m) => m.id === event.data.id)) return prev;
+          const updated = [...prev, event.data];
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+          return updated;
+        });
+      } else if (event.type === "update") {
+        setMessages((prev) => prev.map((m) => (m.id === event.data.id ? event.data : m)));
+      } else if (event.type === "delete") {
+        setMessages((prev) => prev.filter((m) => m.id !== event.data.id));
       }
     });
 
@@ -167,7 +157,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     // Upload file
     const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
 
-    // Create message optimistically
+    // Create message (subscription will add it to the list)
     const created = await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "agent",
@@ -179,7 +169,6 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       status: "sending",
       agent_name: "You",
     });
-    setMessages((prev) => [...prev, created]);
 
     // Send via WhatsApp
     const res = await base44.functions.invoke("whatsappWebhook", {
@@ -217,7 +206,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     if (noteMode) {
-      const created = await base44.entities.Message.create({
+      await base44.entities.Message.create({
         conversation_id: conversation.id,
         sender: "system",
         message_type: "internal_note",
@@ -226,14 +215,13 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         status: "sent",
         agent_name: "You",
       });
-      setMessages((prev) => [...prev, created]);
       await base44.entities.Conversation.update(conversation.id, {
         last_message: "[Note] " + content,
         last_message_time: new Date().toISOString(),
       });
       setSending(false);
     } else {
-      // Create message optimistically first
+      // Create message in DB (subscription will add it to the list via real-time event)
       const created = await base44.entities.Message.create({
         conversation_id: conversation.id,
         sender: "agent",
@@ -243,7 +231,6 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         status: "sending",
         agent_name: "You",
       });
-      setMessages((prev) => [...prev, created]);
 
       // Then send via WhatsApp
       try {
@@ -282,27 +269,25 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       handover_by: "You",
       handover_at: new Date().toISOString(),
     });
-    const sysMsg = await base44.entities.Message.create({
+    await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "system",
       message_type: "text",
       content: "Human agent has taken over this conversation.",
       timestamp: new Date().toISOString(),
     });
-    setMessages((prev) => [...prev, sysMsg]);
     onHandoverChange?.("human");
   };
 
   const handleReturnToAI = async () => {
     await base44.entities.Conversation.update(conversation.id, { handling_mode: "ai" });
-    const sysMsg = await base44.entities.Message.create({
+    await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "system",
       message_type: "text",
       content: "Conversation returned to AI agent.",
       timestamp: new Date().toISOString(),
     });
-    setMessages((prev) => [...prev, sysMsg]);
     onHandoverChange?.("ai");
   };
 
