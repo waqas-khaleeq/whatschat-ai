@@ -41,16 +41,20 @@ export default function AppLayout({ children }) {
         )}>
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-white font-semibold text-sm">WhatsHub</span>
+              <img
+                src="https://media.base44.com/images/public/69ff5fa3607b3fcc3cbe1d68/e15f34a04_Pngtreewhatsappiconlogowhatsappicon_3560531.png"
+                alt="WhatsChat AI"
+                className="w-7 h-7 object-contain"
+              />
+              <span className="text-white font-semibold text-sm">WhatsChat AI</span>
             </div>
           )}
           {collapsed && (
-            <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-white" />
-            </div>
+            <img
+              src="https://media.base44.com/images/public/69ff5fa3607b3fcc3cbe1d68/e15f34a04_Pngtreewhatsappiconlogowhatsappicon_3560531.png"
+              alt="WhatsChat AI"
+              className="w-7 h-7 object-contain"
+            />
           )}
           {!collapsed && (
             <button
