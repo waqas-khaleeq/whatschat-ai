@@ -2,23 +2,21 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, MessageSquare, Users, Calendar, BookOpen,
-  Bot, Zap, BarChart3, Plug, UserCog, Settings, ChevronLeft,
-  ChevronRight, Bell, Search, Wifi, WifiOff
+  Bot, Zap, BarChart3, Settings, ChevronLeft,
+  ChevronRight, Bell, Search
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/inbox", icon: MessageSquare, label: "Inbox", badge: "12" },
+  { path: "/inbox", icon: MessageSquare, label: "Inbox" },
   { path: "/leads", icon: Users, label: "Leads" },
   { path: "/calendar", icon: Calendar, label: "Calendar" },
   { path: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { path: "/ai-agent", icon: Bot, label: "AI Agent" },
   { path: "/automations", icon: Zap, label: "Automations" },
   { path: "/analytics", icon: BarChart3, label: "Analytics" },
-  { path: "/integrations", icon: Plug, label: "Integrations" },
-  { path: "/team", icon: UserCog, label: "Team" },
   { path: "/settings", icon: Settings, label: "Settings" },
 ];
 

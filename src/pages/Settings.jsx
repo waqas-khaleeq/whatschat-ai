@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import { Link } from "react-router-dom";
 import {
-  Smartphone, Bot, BookOpen, Calendar, Users, Tag, Plug, Bell,
-  CheckCircle, XCircle, ChevronRight, Wifi, WifiOff, Save, RefreshCw,
-  Copy, ExternalLink, Check
+  Smartphone, Bot, Calendar, Tag, Bell,
+  Wifi, WifiOff, Save, RefreshCw, CheckCircle,
+  Copy, ExternalLink, Users, Plug
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +16,8 @@ const SECTIONS = [
   { key: "whatsapp", label: "WhatsApp", icon: Smartphone },
   { key: "ai", label: "AI Agent", icon: Bot },
   { key: "calendar", label: "Calendar", icon: Calendar },
-  { key: "team", label: "Team", icon: Users },
   { key: "pipeline", label: "Lead Pipeline", icon: Tag },
   { key: "notifications", label: "Notifications", icon: Bell },
-  { key: "integrations", label: "Integrations", icon: Plug },
 ];
 
 function ToggleRow({ label, desc, value, onChange }) {
@@ -60,7 +59,9 @@ function InputRow({ label, value, onChange, placeholder, type = "text" }) {
 }
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState("whatsapp");
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabFromUrl = urlParams.get("tab");
+  const [activeSection, setActiveSection] = useState(tabFromUrl || "whatsapp");
   const [saved, setSaved] = useState(false);
 
   // WhatsApp settings
@@ -582,38 +583,6 @@ export default function Settings() {
           </Card>
         );
 
-      case "integrations":
-        return (
-          <div className="space-y-4">
-            {[
-              { name: "Google Calendar", desc: "Book appointments", connected: calConnected, icon: "🗓" },
-              { name: "Google Sheets", desc: "Export leads to spreadsheet", connected: false, icon: "📊" },
-              { name: "Zapier", desc: "Connect to 5000+ apps", connected: false, icon: "⚡" },
-              { name: "HubSpot CRM", desc: "Sync leads to HubSpot", connected: false, icon: "🔶" },
-              { name: "Slack", desc: "Team notifications in Slack", connected: false, icon: "💬" },
-              { name: "Webhooks", desc: "Custom HTTP webhooks", connected: false, icon: "🔗" },
-            ].map(({ name, desc, connected, icon }) => (
-              <Card key={name} className="border-border/60">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center text-lg">{icon}</div>
-                    <div>
-                      <p className="text-sm font-semibold">{name}</p>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {connected && <Badge className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">Connected</Badge>}
-                    <Button size="sm" variant={connected ? "outline" : "default"} className="text-xs h-7">
-                      {connected ? "Manage" : "Connect"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        );
-
       default:
         return <p className="text-sm text-muted-foreground">Coming soon...</p>;
     }
@@ -640,6 +609,15 @@ export default function Settings() {
               {s.label}
             </button>
           ))}
+          <div className="pt-2 border-t border-border/40 mt-2 space-y-0.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">Management</p>
+            <Link to="/team" className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+              <Users className="w-4 h-4 shrink-0" /> Team Members
+            </Link>
+            <Link to="/integrations" className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+              <Plug className="w-4 h-4 shrink-0" /> Integrations
+            </Link>
+          </div>
         </aside>
 
         {/* Content */}

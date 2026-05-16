@@ -18,6 +18,7 @@ import Analytics from './pages/Analytics';
 import Integrations from './pages/Integrations';
 import Team from './pages/Team';
 import Settings from './pages/Settings';
+// Add page imports here
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
