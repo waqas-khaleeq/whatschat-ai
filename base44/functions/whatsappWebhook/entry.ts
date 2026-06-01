@@ -1,12 +1,8 @@
-import { createClient } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
 const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
 const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
-const APP_ID = Deno.env.get("BASE44_APP_ID");
-
-// Service-role client — works without any user session (for webhooks from Meta)
-const base44 = createClient({ appId: APP_ID });
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -25,6 +21,7 @@ Deno.serve(async (req) => {
 
   // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === "POST") {
+    const base44 = createClientFromRequest(req);
     const body = await req.json();
 
     // ── Admin utilities (called from Settings page) ──────────────────────────
