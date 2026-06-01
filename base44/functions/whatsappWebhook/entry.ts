@@ -1,8 +1,12 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClient } from 'npm:@base44/sdk@0.8.25';
 
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
 const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
 const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+const APP_ID = Deno.env.get("BASE44_APP_ID");
+
+// Service-role client — works without any user session (for webhooks from Meta)
+const base44 = createClient({ appId: APP_ID });
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -21,13 +25,9 @@ Deno.serve(async (req) => {
 
   // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === "POST") {
-    // createClientFromRequest works for both authenticated (frontend) calls
-    // AND unauthenticated webhook calls — asServiceRole is available in both cases
-    const base44 = createClientFromRequest(req);
     const body = await req.json();
 
     // ── Admin utilities (called from Settings page) ──────────────────────────
-
     if (body._getVerifyToken) {
       return Response.json({ verifyToken: VERIFY_TOKEN });
     }
@@ -134,13 +134,17 @@ Deno.serve(async (req) => {
         const waId = status.id;
         const statusType = status.status;
         const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
-        const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
-        if (msgs.length > 0) {
-          const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
-          await base44.asServiceRole.entities.Message.update(msgs[0].id, {
-            status: newStatus,
-            timestamp: timestamp,
-          });
+        try {
+          const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
+          if (msgs.length > 0) {
+            const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
+            await base44.asServiceRole.entities.Message.update(msgs[0].id, {
+              status: newStatus,
+              timestamp: timestamp,
+            });
+          }
+        } catch (err) {
+          console.error("Status update error:", err.message);
         }
       }
     }
@@ -191,7 +195,6 @@ Deno.serve(async (req) => {
         content = message.video?.caption || "[Video]";
         mediaName = `video-${waMessageId}`;
       } else {
-        // Unsupported message type — skip
         continue;
       }
 
@@ -232,7 +235,6 @@ Deno.serve(async (req) => {
       });
 
       // ── AI auto-reply: ONLY if handling_mode is exactly "ai" ────────────
-      // Re-fetch conversation to get the freshest handling_mode value
       const freshConversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
       const freshConversation = freshConversations[0];
 
