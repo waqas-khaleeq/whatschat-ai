@@ -137,7 +137,6 @@ Deno.serve(async (req) => {
             const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
             await base44.asServiceRole.entities.Message.update(msgs[0].id, {
               status: newStatus,
-              timestamp: timestamp,
             });
           }
         } catch (err) {
