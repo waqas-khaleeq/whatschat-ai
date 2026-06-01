@@ -156,21 +156,44 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     // Upload file first
     const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
 
-    // Send via dedicated WhatsApp function (handles DB save + WA send atomically)
+    // Send via WhatsApp
     const res = await base44.functions.invoke("sendWhatsAppMessage", {
       phone: conversation.customer_phone,
       media_url: file_url,
       media_type: mediaPreview.type,
       media_name: mediaPreview.name,
       caption: input.trim() || undefined,
-      conversation_id: conversation.id,
     });
 
-    if (!res?.data?.success) {
+    const success = res?.data?.success;
+    const waMessageId = res?.data?.whatsapp_message_id || null;
+
+    if (!success) {
       const errMsg = res?.data?.error || "Failed to send media";
       console.error("Media send failed:", errMsg);
-      alert("Failed to send: " + errMsg);
+      alert("❌ Failed to send media:\n" + errMsg);
+      setSending(false);
+      return;
     }
+
+    // Save to DB after WhatsApp confirmed
+    await base44.entities.Message.create({
+      conversation_id: conversation.id,
+      sender: "agent",
+      message_type: mediaPreview.type,
+      content: input.trim() || mediaPreview.name,
+      media_url: file_url,
+      media_name: mediaPreview.name,
+      timestamp: new Date().toISOString(),
+      status: "sent",
+      whatsapp_message_id: waMessageId,
+      agent_name: "You",
+    });
+
+    await base44.entities.Conversation.update(conversation.id, {
+      last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
+      last_message_time: new Date().toISOString(),
+    });
 
     setMediaPreview(null);
     setInput("");
@@ -201,18 +224,39 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       });
       setSending(false);
     } else {
-      // Use dedicated sendWhatsAppMessage function — handles WA send + DB save atomically
+      // 1. First send via WhatsApp API
       const res = await base44.functions.invoke("sendWhatsAppMessage", {
         phone: conversation.customer_phone,
         message: content,
-        conversation_id: conversation.id,
       });
 
-      if (!res?.data?.success) {
+      const success = res?.data?.success;
+      const waMessageId = res?.data?.whatsapp_message_id || null;
+
+      if (!success) {
         const errMsg = res?.data?.error || "Failed to send message";
         console.error("Send failed:", errMsg);
         alert("❌ Message failed to send:\n" + errMsg);
+        setSending(false);
+        return;
       }
+
+      // 2. Save message to DB only after WhatsApp confirmed
+      await base44.entities.Message.create({
+        conversation_id: conversation.id,
+        sender: "agent",
+        message_type: "text",
+        content,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        whatsapp_message_id: waMessageId,
+        agent_name: "You",
+      });
+
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: content,
+        last_message_time: new Date().toISOString(),
+      });
 
       setSending(false);
     }

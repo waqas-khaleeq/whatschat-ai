@@ -8,10 +8,8 @@ Deno.serve(async (req) => {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const base44 = createClientFromRequest(req);
   const body = await req.json();
-
-  const { phone, message, media_url, media_type, media_name, caption, conversation_id } = body;
+  const { phone, message, media_url, media_type, media_name, caption } = body;
 
   if (!phone) {
     return Response.json({ error: "phone is required" }, { status: 400 });
@@ -69,27 +67,5 @@ Deno.serve(async (req) => {
   }
 
   const waMessageId = sendData.messages?.[0]?.id || null;
-
-  // If conversation_id given, persist the message record
-  if (conversation_id) {
-    await base44.asServiceRole.entities.Message.create({
-      conversation_id,
-      sender: "agent",
-      message_type: media_type ? (media_type) : "text",
-      content: message || caption || media_name || "[Media]",
-      media_url: media_url || null,
-      media_name: media_name || null,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      whatsapp_message_id: waMessageId,
-      agent_name: "Agent",
-    });
-
-    await base44.asServiceRole.entities.Conversation.update(conversation_id, {
-      last_message: message || `[${media_type}]`,
-      last_message_time: new Date().toISOString(),
-    });
-  }
-
   return Response.json({ success: true, whatsapp_message_id: waMessageId });
 });
