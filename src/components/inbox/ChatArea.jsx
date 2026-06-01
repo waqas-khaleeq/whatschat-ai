@@ -152,46 +152,26 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   const sendMedia = async () => {
     if (!mediaPreview || !conversation) return;
     setSending(true);
-    const typeMap = { audio: "audio", video: "video", image: "image", document: "document" };
 
-    // Upload file
+    // Upload file first
     const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
 
-    // Create message (subscription will add it to the list)
-    const created = await base44.entities.Message.create({
-      conversation_id: conversation.id,
-      sender: "agent",
-      message_type: typeMap[mediaPreview.type] || "document",
-      content: input.trim() || mediaPreview.name,
-      media_url: file_url,
-      media_name: mediaPreview.name,
-      timestamp: new Date().toISOString(),
-      status: "sending",
-      agent_name: "You",
-    });
-
-    // Send via WhatsApp
-    const res = await base44.functions.invoke("whatsappWebhook", {
-      _send: true,
+    // Send via dedicated WhatsApp function (handles DB save + WA send atomically)
+    const res = await base44.functions.invoke("sendWhatsAppMessage", {
       phone: conversation.customer_phone,
       media_url: file_url,
       media_type: mediaPreview.type,
       media_name: mediaPreview.name,
       caption: input.trim() || undefined,
-    });
-    const success = res?.data?.success;
-    const newStatus = success ? "sent" : "failed";
-
-    // Update message with status and WhatsApp ID
-    await base44.entities.Message.update(created.id, {
-      status: newStatus,
-      whatsapp_message_id: res?.data?.data?.messages?.[0]?.id,
+      conversation_id: conversation.id,
     });
 
-    await base44.entities.Conversation.update(conversation.id, {
-      last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
-      last_message_time: new Date().toISOString(),
-    });
+    if (!res?.data?.success) {
+      const errMsg = res?.data?.error || "Failed to send media";
+      console.error("Media send failed:", errMsg);
+      alert("Failed to send: " + errMsg);
+    }
+
     setMediaPreview(null);
     setInput("");
     setSending(false);
@@ -221,44 +201,19 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       });
       setSending(false);
     } else {
-      // Create message in DB (subscription will add it to the list via real-time event)
-      const created = await base44.entities.Message.create({
+      // Use dedicated sendWhatsAppMessage function — handles WA send + DB save atomically
+      const res = await base44.functions.invoke("sendWhatsAppMessage", {
+        phone: conversation.customer_phone,
+        message: content,
         conversation_id: conversation.id,
-        sender: "agent",
-        message_type: "text",
-        content,
-        timestamp: new Date().toISOString(),
-        status: "sending",
-        agent_name: "You",
       });
 
-      // Then send via WhatsApp
-      try {
-        const res = await base44.functions.invoke("whatsappWebhook", {
-          _send: true,
-          phone: conversation.customer_phone,
-          message: content,
-        });
-        const success = res?.data?.success;
-        const newStatus = success ? "sent" : "failed";
-        const msgId = res?.data?.data?.messages?.[0]?.id || null;
-
-        // Update message with WhatsApp ID and status
-        await base44.entities.Message.update(created.id, {
-          status: newStatus,
-          whatsapp_message_id: msgId,
-        });
-
-        // Update conversation
-        await base44.entities.Conversation.update(conversation.id, {
-          last_message: content,
-          last_message_time: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error("Error sending message:", err);
-        // Update message status to failed
-        await base44.entities.Message.update(created.id, { status: "failed" });
+      if (!res?.data?.success) {
+        const errMsg = res?.data?.error || "Failed to send message";
+        console.error("Send failed:", errMsg);
+        alert("❌ Message failed to send:\n" + errMsg);
       }
+
       setSending(false);
     }
   };
