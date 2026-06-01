@@ -51,14 +51,16 @@ export default function NewChatModal({ onClose, onConversationCreated }) {
       }
 
       // 2. Send via WhatsApp API
-      const res = await base44.functions.invoke("whatsappWebhook", {
-        _send: true,
+      const res = await base44.functions.invoke("sendWhatsAppMessage", {
         phone: digits,
         message: firstMessage.trim(),
       });
 
       const success = res?.data?.success;
-      const msgId = res?.data?.data?.messages?.[0]?.id || null;
+      if (!success) {
+        throw new Error(res?.data?.error || "Failed to send WhatsApp message");
+      }
+      const msgId = res?.data?.whatsapp_message_id || null;
 
       // 3. Save message record
       await base44.entities.Message.create({
