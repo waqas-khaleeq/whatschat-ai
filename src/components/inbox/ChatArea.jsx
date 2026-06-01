@@ -157,21 +157,28 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
 
     // Send via WhatsApp
-    const res = await base44.functions.invoke("sendWhatsAppMessage", {
-      phone: conversation.customer_phone,
-      media_url: file_url,
-      media_type: mediaPreview.type,
-      media_name: mediaPreview.name,
-      caption: input.trim() || undefined,
-    });
+    let waMessageId = null;
+    let sendError = null;
+    try {
+      const res = await base44.functions.invoke("sendWhatsAppMessage", {
+        phone: conversation.customer_phone,
+        media_url: file_url,
+        media_type: mediaPreview.type,
+        media_name: mediaPreview.name,
+        caption: input.trim() || undefined,
+      });
+      if (res?.data?.success) {
+        waMessageId = res.data.whatsapp_message_id || null;
+      } else {
+        sendError = res?.data?.error || "Unknown error";
+      }
+    } catch (err) {
+      sendError = err?.response?.data?.error || err?.message || "Failed to send media";
+      console.error("Media sendWhatsAppMessage error:", sendError);
+    }
 
-    const success = res?.data?.success;
-    const waMessageId = res?.data?.whatsapp_message_id || null;
-
-    if (!success) {
-      const errMsg = res?.data?.error || "Failed to send media";
-      console.error("Media send failed:", errMsg);
-      alert("❌ Failed to send media:\n" + errMsg);
+    if (sendError) {
+      alert("❌ Failed to send media:\n" + sendError);
       setSending(false);
       return;
     }
@@ -224,24 +231,31 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       });
       setSending(false);
     } else {
-      // 1. First send via WhatsApp API
-      const res = await base44.functions.invoke("sendWhatsAppMessage", {
-        phone: conversation.customer_phone,
-        message: content,
-      });
+      let waMessageId = null;
+      let sendError = null;
 
-      const success = res?.data?.success;
-      const waMessageId = res?.data?.whatsapp_message_id || null;
+      try {
+        const res = await base44.functions.invoke("sendWhatsAppMessage", {
+          phone: conversation.customer_phone,
+          message: content,
+        });
+        if (res?.data?.success) {
+          waMessageId = res.data.whatsapp_message_id || null;
+        } else {
+          sendError = res?.data?.error || "Unknown error";
+        }
+      } catch (err) {
+        sendError = err?.response?.data?.error || err?.message || "Failed to send";
+        console.error("sendWhatsAppMessage error:", sendError);
+      }
 
-      if (!success) {
-        const errMsg = res?.data?.error || "Failed to send message";
-        console.error("Send failed:", errMsg);
-        alert("❌ Message failed to send:\n" + errMsg);
+      if (sendError) {
+        alert("❌ Message failed to send:\n" + sendError);
         setSending(false);
         return;
       }
 
-      // 2. Save message to DB only after WhatsApp confirmed
+      // Save message to DB after WhatsApp confirmed
       await base44.entities.Message.create({
         conversation_id: conversation.id,
         sender: "agent",
