@@ -1,9 +1,8 @@
-import { createClientFromRequest, createClient } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
 const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
 const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
-const APP_ID = Deno.env.get("BASE44_APP_ID");
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -20,21 +19,19 @@ Deno.serve(async (req) => {
     return new Response("Forbidden", { status: 403 });
   }
 
-  // ── POST: incoming messages / test ────────────────────────────────────────
+  // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === "POST") {
-    // Use request-based client for authenticated frontend calls,
-    // but always have a service-role client for webhook/unauthenticated calls
-    const reqClient = createClientFromRequest(req);
-    const serviceClient = createClient({ appId: APP_ID });
-    const base44 = serviceClient; // default to service role
+    // createClientFromRequest works for both authenticated (frontend) calls
+    // AND unauthenticated webhook calls — asServiceRole is available in both cases
+    const base44 = createClientFromRequest(req);
     const body = await req.json();
 
-    // Return verify token for Settings page display
+    // ── Admin utilities (called from Settings page) ──────────────────────────
+
     if (body._getVerifyToken) {
       return Response.json({ verifyToken: VERIFY_TOKEN });
     }
 
-    // Check if WhatsApp API is actually connected by calling the API
     if (body._checkConnection) {
       if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
         return Response.json({ connected: false, reason: "Missing credentials" });
@@ -44,16 +41,18 @@ Deno.serve(async (req) => {
       });
       const checkData = await checkRes.json();
       if (checkRes.ok && checkData.id) {
-        return Response.json({ connected: true, display_phone_number: checkData.display_phone_number, verified_name: checkData.verified_name });
+        return Response.json({
+          connected: true,
+          display_phone_number: checkData.display_phone_number,
+          verified_name: checkData.verified_name,
+        });
       }
       return Response.json({ connected: false, reason: checkData.error?.message || "Invalid credentials" });
     }
 
-    // Handle manual agent send (text or media)
+    // ── Manual agent send (text or media) ────────────────────────────────────
     if (body._send && body.phone) {
-      // Normalize phone: remove +, spaces, dashes — WhatsApp API needs digits only with country code
       const toPhone = String(body.phone).replace(/[^\d]/g, "");
-
       let msgPayload;
 
       if (body.media_url && body.media_type) {
@@ -90,15 +89,15 @@ Deno.serve(async (req) => {
       });
       const sendData = await sendRes.json();
       console.log("WhatsApp send response:", JSON.stringify(sendData));
-      if (!sendRes.ok) return Response.json({ success: false, error: sendData.error?.message || "Failed", details: sendData }, { status: 400 });
+      if (!sendRes.ok) {
+        return Response.json({ success: false, error: sendData.error?.message || "Failed", details: sendData }, { status: 400 });
+      }
       return Response.json({ success: true, data: sendData });
     }
 
-    // Handle test message from Settings page
+    // ── Test message from Settings page ──────────────────────────────────────
     if (body._test && body.phone) {
-      console.log("PHONE_NUMBER_ID:", PHONE_NUMBER_ID);
-      console.log("ACCESS_TOKEN exists:", !!ACCESS_TOKEN);
-      console.log("Sending to:", body.phone);
+      console.log("Test send to:", body.phone);
       const testRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
         method: "POST",
         headers: {
@@ -109,30 +108,32 @@ Deno.serve(async (req) => {
           messaging_product: "whatsapp",
           to: body.phone,
           type: "text",
-          text: { body: "✅ WhatsApp connection test successful! Your WhatsHub AI inbox is connected and ready." },
+          text: { body: "✅ WhatsApp connection test successful! Your WhatsChat AI inbox is connected and ready." },
         }),
       });
       const testData = await testRes.json();
-      console.log("WhatsApp API response:", JSON.stringify(testData));
-      if (!testRes.ok) return Response.json({ error: testData.error?.message || "Failed", details: testData }, { status: 400 });
+      console.log("Test message response:", JSON.stringify(testData));
+      if (!testRes.ok) {
+        return Response.json({ error: testData.error?.message || "Failed", details: testData }, { status: 400 });
+      }
       return Response.json({ success: true, data: testData });
     }
 
+    // ── Incoming webhook from Meta ────────────────────────────────────────────
     const entry = body?.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
 
-    if (!value || !value.messages) {
+    if (!value) {
       return new Response("OK", { status: 200 });
     }
 
-    // Also handle status updates (delivery/read receipts)
-    if (value.statuses) {
+    // Handle delivery/read status updates
+    if (value.statuses && value.statuses.length > 0) {
       for (const status of value.statuses) {
         const waId = status.id;
         const statusType = status.status;
         const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
-        
         const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
         if (msgs.length > 0) {
           const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
@@ -144,19 +145,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (!value.messages || value.messages.length === 0) {
+      return new Response("OK", { status: 200 });
+    }
+
     for (const message of value.messages) {
       const phone = message.from;
       const waMessageId = message.id;
       const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
 
-      // ── DEDUPLICATION FIRST: skip if we already processed this WhatsApp message ID ──
+      // ── Deduplication: skip already-processed messages ────────────────────
       const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
       if (existingMsgs.length > 0) {
         console.log(`Duplicate message ${waMessageId}, skipping.`);
         continue;
       }
 
-      // Handle different message types
+      // ── Parse message content ─────────────────────────────────────────────
       let messageType = "text";
       let content = "";
       let mediaUrl = null;
@@ -167,38 +172,34 @@ Deno.serve(async (req) => {
         if (!content.trim()) continue;
       } else if (message.type === "audio") {
         messageType = "audio";
-        const audio = message.audio;
-        mediaUrl = audio.link;
+        mediaUrl = message.audio?.link || null;
         content = "[Voice Message]";
         mediaName = `voice-${waMessageId}.ogg`;
       } else if (message.type === "image") {
         messageType = "image";
-        const img = message.image;
-        mediaUrl = img.link;
-        content = img.caption || "[Image]";
+        mediaUrl = message.image?.link || null;
+        content = message.image?.caption || "[Image]";
         mediaName = `image-${waMessageId}`;
       } else if (message.type === "document") {
         messageType = "document";
-        const doc = message.document;
-        mediaUrl = doc.link;
-        content = doc.filename || "[Document]";
-        mediaName = doc.filename;
+        mediaUrl = message.document?.link || null;
+        content = message.document?.filename || "[Document]";
+        mediaName = message.document?.filename || null;
       } else if (message.type === "video") {
         messageType = "video";
-        const vid = message.video;
-        mediaUrl = vid.link;
-        content = vid.caption || "[Video]";
+        mediaUrl = message.video?.link || null;
+        content = message.video?.caption || "[Video]";
         mediaName = `video-${waMessageId}`;
       } else {
+        // Unsupported message type — skip
         continue;
       }
 
-      // Find or create conversation
-      let conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
+      // ── Find or create conversation ───────────────────────────────────────
+      const conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
       let conversation = conversations[0];
 
       if (!conversation) {
-        // New contact — create conversation
         const contact = value.contacts?.find(c => c.wa_id === phone);
         conversation = await base44.asServiceRole.entities.Conversation.create({
           customer_phone: phone,
@@ -210,7 +211,6 @@ Deno.serve(async (req) => {
           handling_mode: "ai",
         });
       } else {
-        // Update existing conversation
         await base44.asServiceRole.entities.Conversation.update(conversation.id, {
           last_message: content,
           last_message_time: timestamp,
@@ -218,7 +218,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Save message
+      // ── Save incoming message ─────────────────────────────────────────────
       await base44.asServiceRole.entities.Message.create({
         conversation_id: conversation.id,
         sender: "customer",
@@ -231,26 +231,25 @@ Deno.serve(async (req) => {
         status: "delivered",
       });
 
-      // If AI mode — send an auto-reply via WhatsApp API
-      if (conversation.handling_mode === "ai" && content.trim()) {
+      // ── AI auto-reply: ONLY if handling_mode is exactly "ai" ────────────
+      // Re-fetch conversation to get the freshest handling_mode value
+      const freshConversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
+      const freshConversation = freshConversations[0];
+
+      if (freshConversation?.handling_mode === "ai" && messageType === "text" && content.trim()) {
+        console.log(`AI replying to conversation ${freshConversation.id}`);
         try {
-          // Fetch in parallel: chat history, knowledge base, system prompt setting
           const [prevMessages, kbEntries, promptSettings] = await Promise.all([
-            base44.asServiceRole.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 20),
+            base44.asServiceRole.entities.Message.filter({ conversation_id: freshConversation.id }, "timestamp", 20),
             base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
             base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
           ]);
 
-          // Build conversation history
           const historyText = prevMessages
-            .filter(m => m.sender !== "system" && m.message_type !== "internal_note" && m.id !== conversation.id)
-            .map(m => {
-              const role = m.sender === "customer" ? "Customer" : "Assistant";
-              return `${role}: ${m.content}`;
-            })
+            .filter(m => m.sender !== "system" && m.message_type !== "internal_note")
+            .map(m => `${m.sender === "customer" ? "Customer" : "Assistant"}: ${m.content}`)
             .join("\n");
 
-          // Build knowledge base context
           const kbText = kbEntries.map(kb => {
             if (kb.content_type === "faq" && kb.faq_question && kb.faq_answer) {
               return `Q: ${kb.faq_question}\nA: ${kb.faq_answer}`;
@@ -258,26 +257,24 @@ Deno.serve(async (req) => {
             return kb.content ? `[${kb.category}] ${kb.title}:\n${kb.content}` : `[${kb.category}] ${kb.title}`;
           }).join("\n\n");
 
-          // System prompt from settings, or fallback default
-          const systemPrompt = promptSettings?.[0]?.value || "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Keep responses short and friendly.";
+          const systemPrompt = promptSettings?.[0]?.value ||
+            "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Keep responses short (1-3 sentences).";
 
-          // Generate AI reply
           const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({
             prompt: `${systemPrompt}
 
-      ${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
-      ${historyText ? `Previous conversation:\n${historyText}\n` : ""}
-      Customer's latest message: "${content}"
+${kbText ? `--- KNOWLEDGE BASE ---\n${kbText}\n--- END KNOWLEDGE BASE ---\n` : ""}
+${historyText ? `Previous conversation:\n${historyText}\n` : ""}
+Customer's latest message: "${content}"
 
-      Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
+Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
           });
 
           if (!aiReply || !aiReply.trim()) {
-            console.log("AI reply empty, skipping");
-            return new Response("OK", { status: 200 });
+            console.log("AI reply was empty, skipping.");
+            continue;
           }
 
-          // Send via WhatsApp Cloud API
           const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
             method: "POST",
             headers: {
@@ -293,27 +290,31 @@ Deno.serve(async (req) => {
           });
 
           const sendData = await sendRes.json();
-          const status = sendRes.ok ? "sent" : "failed";
+          const msgStatus = sendRes.ok ? "sent" : "failed";
+          if (!sendRes.ok) {
+            console.error("WhatsApp AI send failed:", JSON.stringify(sendData));
+          }
 
-          // Save AI reply as message
           await base44.asServiceRole.entities.Message.create({
-            conversation_id: conversation.id,
+            conversation_id: freshConversation.id,
             sender: "ai",
             content: aiReply,
             message_type: "text",
             timestamp: new Date().toISOString(),
-            status: status,
+            status: msgStatus,
             whatsapp_message_id: sendData.messages?.[0]?.id || null,
           });
 
-          await base44.asServiceRole.entities.Conversation.update(conversation.id, {
+          await base44.asServiceRole.entities.Conversation.update(freshConversation.id, {
             last_message: aiReply,
             last_message_time: new Date().toISOString(),
           });
+
         } catch (err) {
           console.error("AI reply error:", err.message);
-          // Continue without failing the webhook
         }
+      } else if (freshConversation?.handling_mode !== "ai") {
+        console.log(`Conversation ${freshConversation?.id} is in "${freshConversation?.handling_mode}" mode — AI skipped.`);
       }
     }
 
