@@ -1,6 +1,152 @@
-import { Bot, User, FileText, CheckCheck, Check, AlertCircle, StickyNote, Volume2, Film, Download } from "lucide-react";
+import { Bot, User, FileText, CheckCheck, Check, AlertCircle, StickyNote, Volume2, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+
+// Check if URL requires auth (Meta Graph API URLs)
+function isMetaMediaUrl(url) {
+  return url && (url.includes("graph.facebook.com") || url.includes("lookaside.fbsbx.com") || url.includes("mmg.whatsapp.net"));
+}
+
+function useProxiedMedia(mediaUrl) {
+  const [resolvedUrl, setResolvedUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!mediaUrl) return;
+    if (!isMetaMediaUrl(mediaUrl)) {
+      setResolvedUrl(mediaUrl);
+      return;
+    }
+    setLoading(true);
+    base44.functions.invoke("getWhatsAppMedia", { media_url: mediaUrl })
+      .then(res => {
+        if (res?.data?.data_url) {
+          setResolvedUrl(res.data.data_url);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [mediaUrl]);
+
+  return { resolvedUrl, loading, error };
+}
+
+function MediaLoading() {
+  return (
+    <div className="flex items-center justify-center w-[260px] h-[120px] bg-black/10 rounded-lg">
+      <Loader2 className="w-6 h-6 animate-spin text-[#128c7e]" />
+    </div>
+  );
+}
+
+function MediaError({ label = "Media unavailable" }) {
+  return (
+    <div className="flex items-center justify-center w-[260px] h-[80px] bg-black/5 rounded-lg">
+      <span className="text-xs text-[#667781]">{label}</span>
+    </div>
+  );
+}
+
+function ImageBubble({ msg, isSent, timeStr, renderStatus }) {
+  const { resolvedUrl, loading, error } = useProxiedMedia(msg.media_url);
+  return (
+    <div className="overflow-hidden rounded-lg">
+      {loading && <MediaLoading />}
+      {error && <MediaError label="Image unavailable" />}
+      {resolvedUrl && (
+        <a href={resolvedUrl} target="_blank" rel="noreferrer" download>
+          <img src={resolvedUrl} alt="image" className="max-w-[260px] max-h-[200px] w-full object-cover block cursor-pointer hover:opacity-90 transition-opacity" />
+        </a>
+      )}
+      {msg.content && msg.content !== msg.media_name && (
+        <p className="text-sm mt-1.5 px-0.5 leading-relaxed">{msg.content}</p>
+      )}
+      <div className="flex items-center justify-end gap-0.5 mt-1">
+        <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>{timeStr}</span>
+        {renderStatus()}
+      </div>
+    </div>
+  );
+}
+
+function VideoBubble({ msg, isSent, timeStr, renderStatus }) {
+  const { resolvedUrl, loading, error } = useProxiedMedia(msg.media_url);
+  return (
+    <div className="overflow-hidden rounded-lg">
+      {loading && <MediaLoading />}
+      {error && <MediaError label="Video unavailable" />}
+      {resolvedUrl && <video src={resolvedUrl} controls className="max-w-[260px] max-h-[200px] w-full rounded-lg block" />}
+      {msg.content && msg.content !== msg.media_name && (
+        <p className="text-sm mt-1.5 leading-relaxed">{msg.content}</p>
+      )}
+      <div className="flex items-center justify-end gap-0.5 mt-1">
+        <span className="text-[11px] text-[#111b21]/70">{timeStr}</span>
+        {renderStatus()}
+      </div>
+    </div>
+  );
+}
+
+function AudioBubble({ msg, isSent, timeStr, renderStatus }) {
+  const { resolvedUrl, loading, error } = useProxiedMedia(msg.media_url);
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[260px]">
+      <div className={cn("w-10 h-10 rounded-full flex items-center justify-center shrink-0", isSent ? "bg-white/20" : "bg-[#128c7e]/10")}>
+        <Volume2 className={cn("w-5 h-5", isSent ? "text-white" : "text-[#128c7e]")} />
+      </div>
+      <div className="flex-1 min-w-0">
+        {loading && <div className="flex items-center gap-1 text-xs text-[#667781]"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</div>}
+        {error && <span className="text-xs text-[#667781]">Audio unavailable</span>}
+        {resolvedUrl && <audio src={resolvedUrl} controls className="w-full h-8" />}
+        <div className="flex items-center justify-end gap-0.5 mt-0.5">
+          <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>{timeStr}</span>
+          {renderStatus()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocumentBubble({ msg, isSent, timeStr, renderStatus }) {
+  const { resolvedUrl, loading, error } = useProxiedMedia(msg.media_url);
+
+  const handleDownload = () => {
+    if (!resolvedUrl) return;
+    const a = document.createElement("a");
+    a.href = resolvedUrl;
+    a.download = msg.media_name || "document";
+    a.click();
+  };
+
+  return (
+    <div
+      className={cn("flex items-center gap-3 min-w-[200px] max-w-[260px] rounded-lg p-2", isSent ? "bg-white/10" : "bg-[#128c7e]/5")}
+    >
+      <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", isSent ? "bg-white/20" : "bg-[#128c7e]/10")}>
+        <FileText className={cn("w-6 h-6", isSent ? "text-white" : "text-[#128c7e]")} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate leading-none">{msg.media_name || msg.content || "Document"}</p>
+        {loading && <p className="text-[11px] mt-0.5 text-[#667781]">Loading...</p>}
+        {error && <p className="text-[11px] mt-0.5 text-red-400">Unavailable</p>}
+        {resolvedUrl && (
+          <button onClick={handleDownload} className="flex items-center gap-1 text-[11px] mt-0.5 text-[#128c7e] hover:underline">
+            <Download className="w-3 h-3" /> Download
+          </button>
+        )}
+        <div className="flex items-center justify-end gap-0.5 mt-1">
+          <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>{timeStr}</span>
+          {renderStatus()}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MessageBubble({ msg }) {
   const isCustomer = msg.sender === "customer";
@@ -60,93 +206,16 @@ export default function MessageBubble({ msg }) {
   const renderContent = () => {
     switch (msg.message_type) {
       case "image":
-        return (
-          <div className="overflow-hidden rounded-lg">
-            <img
-              src={msg.media_url}
-              alt="image"
-              className="max-w-[260px] max-h-[200px] w-full object-cover block"
-            />
-            {msg.content && msg.content !== msg.media_name && (
-              <p className="text-sm mt-1.5 px-0.5 leading-relaxed text-white">{msg.content}</p>
-            )}
-            <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
-              <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
-                {timeStr}
-              </span>
-              {renderStatus()}
-            </div>
-          </div>
-        );
+        return <ImageBubble msg={msg} isSent={isSent} timeStr={timeStr} renderStatus={renderStatus} />;
 
       case "video":
-        return (
-          <div className="overflow-hidden rounded-lg">
-            <video
-              src={msg.media_url}
-              controls
-              className="max-w-[260px] max-h-[200px] w-full rounded-lg block"
-            />
-            {msg.content && msg.content !== msg.media_name && (
-              <p className="text-sm mt-1.5 leading-relaxed text-white">{msg.content}</p>
-            )}
-            <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
-              <span className="text-[11px] text-[#111b21]/70">{timeStr}</span>
-              {renderStatus()}
-            </div>
-          </div>
-        );
+        return <VideoBubble msg={msg} isSent={isSent} timeStr={timeStr} renderStatus={renderStatus} />;
 
       case "audio":
-        return (
-          <div className="flex items-center gap-2.5 min-w-[200px] max-w-[260px]">
-            <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-              isSent ? "bg-white/20" : "bg-[#128c7e]/10"
-            )}>
-              <Volume2 className={cn("w-5 h-5", isSent ? "text-white" : "text-[#128c7e]")} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <audio src={msg.media_url} controls className="w-full h-8" />
-              <div className={cn("flex items-center justify-end gap-0.5 mt-0.5")}>
-                <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
-                  {timeStr}
-                </span>
-                {renderStatus()}
-              </div>
-            </div>
-          </div>
-        );
+        return <AudioBubble msg={msg} isSent={isSent} timeStr={timeStr} renderStatus={renderStatus} />;
 
       case "document":
-        return (
-          <a
-            href={msg.media_url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(
-              "flex items-center gap-3 min-w-[200px] max-w-[260px] rounded-lg p-2 transition-opacity hover:opacity-80",
-              isSent ? "bg-white/10" : "bg-[#128c7e]/5"
-            )}
-          >
-            <div className={cn(
-              "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
-              isSent ? "bg-white/20" : "bg-[#128c7e]/10"
-            )}>
-              <FileText className={cn("w-6 h-6", isSent ? "text-white" : "text-[#128c7e]")} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate leading-none">{msg.media_name || msg.content || "Document"}</p>
-              <p className={cn("text-[11px] mt-0.5", isSent ? "text-white/60" : "text-[#667781]")}>Tap to open</p>
-              <div className={cn("flex items-center justify-end gap-0.5 mt-1")}>
-                <span className={cn("text-[11px]", isSent ? "text-[#111b21]/70" : "text-[#667781]")}>
-                  {timeStr}
-                </span>
-                {renderStatus()}
-              </div>
-            </div>
-          </a>
-        );
+        return <DocumentBubble msg={msg} isSent={isSent} timeStr={timeStr} renderStatus={renderStatus} />;
 
       default:
         return (
