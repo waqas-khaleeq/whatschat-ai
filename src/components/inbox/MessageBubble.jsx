@@ -4,9 +4,13 @@ import { format } from "date-fns";
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 
-// Check if URL requires auth (Meta Graph API URLs)
-function isMetaMediaUrl(url) {
-  return url && (url.includes("graph.facebook.com") || url.includes("lookaside.fbsbx.com") || url.includes("mmg.whatsapp.net"));
+// Needs proxying if it's a Meta URL or a WhatsApp media ID (prefixed or raw)
+function needsProxy(url) {
+  if (!url) return false;
+  if (url.startsWith("wa-media-id:")) return true;
+  if (!url.startsWith("http")) return true; // raw legacy media ID
+  if (url.includes("graph.facebook.com") || url.includes("lookaside.fbsbx.com") || url.includes("mmg.whatsapp.net")) return true;
+  return false;
 }
 
 function useProxiedMedia(mediaUrl) {
@@ -16,11 +20,13 @@ function useProxiedMedia(mediaUrl) {
 
   useEffect(() => {
     if (!mediaUrl) return;
-    if (!isMetaMediaUrl(mediaUrl)) {
+    if (!needsProxy(mediaUrl)) {
       setResolvedUrl(mediaUrl);
       return;
     }
     setLoading(true);
+    setResolvedUrl(null);
+    setError(false);
     base44.functions.invoke("getWhatsAppMedia", { media_url: mediaUrl })
       .then(res => {
         if (res?.data?.data_url) {

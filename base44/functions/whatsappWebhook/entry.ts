@@ -4,6 +4,11 @@ const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
 const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
 const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
 
+// Returns the WhatsApp media ID prefixed so the frontend knows it needs proxying
+function storeMediaId(mediaId) {
+  return mediaId ? `wa-media-id:${mediaId}` : null;
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
 
@@ -172,22 +177,22 @@ Deno.serve(async (req) => {
         if (!content.trim()) continue;
       } else if (message.type === "audio") {
         messageType = "audio";
-        mediaUrl = message.audio?.link || null;
+        mediaUrl = storeMediaId(message.audio?.id);
         content = "[Voice Message]";
         mediaName = `voice-${waMessageId}.ogg`;
       } else if (message.type === "image") {
         messageType = "image";
-        mediaUrl = message.image?.link || null;
+        mediaUrl = storeMediaId(message.image?.id);
         content = message.image?.caption || "[Image]";
         mediaName = `image-${waMessageId}`;
       } else if (message.type === "document") {
         messageType = "document";
-        mediaUrl = message.document?.link || null;
+        mediaUrl = storeMediaId(message.document?.id);
         content = message.document?.filename || "[Document]";
         mediaName = message.document?.filename || null;
       } else if (message.type === "video") {
         messageType = "video";
-        mediaUrl = message.video?.link || null;
+        mediaUrl = storeMediaId(message.video?.id);
         content = message.video?.caption || "[Video]";
         mediaName = `video-${waMessageId}`;
       } else {
