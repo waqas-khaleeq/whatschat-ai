@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Smartphone, Bot, Calendar, Tag, Bell,
+  Smartphone, Bot, Tag,
   Wifi, WifiOff, Save, RefreshCw, CheckCircle,
   Copy, ExternalLink, Eye, EyeOff, AlertTriangle
 } from "lucide-react";
@@ -15,9 +15,7 @@ import { base44 } from "@/api/base44Client";
 const SECTIONS = [
   { key: "whatsapp", label: "WhatsApp", icon: Smartphone },
   { key: "ai", label: "AI Agent", icon: Bot },
-  { key: "calendar", label: "Calendar", icon: Calendar },
   { key: "pipeline", label: "Lead Pipeline", icon: Tag },
-  { key: "notifications", label: "Notifications", icon: Bell },
 ];
 
 function ToggleRow({ label, desc, value, onChange }) {
@@ -382,7 +380,7 @@ export default function Settings() {
           </div>
         );
 
-      case "calendar":
+      case "calendar_disabled":
          const handleCalendarConnect = async () => {
            if (!calClientId.trim() || !calClientSecret.trim()) {
              alert("Please enter both Client ID and Client Secret");
@@ -515,10 +513,8 @@ export default function Settings() {
                          Connected
                        </>
                      ) : (
-                       <>
-                         <Calendar className="w-3.5 h-3.5" />
-                         Connect Calendar
-                       </>
+                       <>Connect Calendar</>
+
                      )}
                    </Button>
                  </div>
@@ -560,18 +556,7 @@ export default function Settings() {
            </div>
          );
 
-      case "notifications":
-        return (
-          <Card className="border-border/60">
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Notification Preferences</CardTitle></CardHeader>
-            <CardContent>
-              <ToggleRow label="New Lead Notification" desc="Get notified when a new lead messages" value={notifNewLead} onChange={setNotifNewLead} />
-              <ToggleRow label="Human Takeover Alert" desc="When a team member takes over from AI" value={notifHuman} onChange={setNotifHuman} />
-              <ToggleRow label="Appointment Booked" desc="When an appointment is confirmed" value={notifAppt} onChange={setNotifAppt} />
-              <ToggleRow label="Missed Message Alert" desc="When a message goes unanswered for 1h" value={notifMissed} onChange={setNotifMissed} />
-            </CardContent>
-          </Card>
-        );
+
 
       case "pipeline":
         return (
