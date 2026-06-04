@@ -5,7 +5,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        inter: ['DM Sans', 'sans-serif'],
+        istok: ['Istok Web', 'sans-serif'],
       },
       borderRadius: {
         lg: 'var(--radius)',
