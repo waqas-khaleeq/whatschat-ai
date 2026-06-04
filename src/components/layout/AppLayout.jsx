@@ -1,26 +1,20 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, MessageSquare, Users, Calendar, BookOpen,
-  Bot, Zap, BarChart3, Settings, ChevronLeft,
-  ChevronRight, Bell
+  LayoutDashboard, MessageSquare, Users, BookOpen,
+  Bot, Settings, ChevronLeft, ChevronRight, Bell
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/inbox", icon: MessageSquare, label: "Inbox" },
   { path: "/leads", icon: Users, label: "Leads" },
-  { path: "/calendar", icon: Calendar, label: "Calendar" },
   { path: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { path: "/ai-agent", icon: Bot, label: "AI Agent" },
-  { path: "/automations", icon: Zap, label: "Automations" },
-  { path: "/analytics", icon: BarChart3, label: "Analytics" },
   { path: "/settings", icon: Settings, label: "Settings" },
 ];
 
-// Bottom nav items for mobile (only most important 4)
 const mobileNavItems = [
   { path: "/inbox", icon: MessageSquare, label: "Inbox" },
   { path: "/leads", icon: Users, label: "Leads" },
@@ -93,14 +87,6 @@ export default function AppLayout({ children }) {
               >
                 <item.icon className="w-4 h-4 shrink-0" />
                 {!collapsed && <span className="text-sm font-medium truncate">{item.label}</span>}
-                {!collapsed && item.badge && (
-                  <Badge className="ml-auto bg-primary/20 text-primary text-xs h-4 px-1.5 border-0">
-                    {item.badge}
-                  </Badge>
-                )}
-                {collapsed && item.badge && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-                )}
               </Link>
             );
           })}
@@ -132,9 +118,7 @@ export default function AppLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 shrink-0">
-          {/* Mobile: app name. Desktop: search */}
           <div className="flex items-center gap-2">
-            {/* Mobile logo/name */}
             <div className="flex md:hidden items-center gap-2">
               <img
                 src="https://media.base44.com/images/public/69ff5fa3607b3fcc3cbe1d68/e15f34a04_Pngtreewhatsappiconlogowhatsappicon_3560531.png"
@@ -158,7 +142,7 @@ export default function AppLayout({ children }) {
           </div>
         </header>
 
-        {/* Page content — subtract bottom nav height on mobile */}
+        {/* Page content */}
         <main className="flex-1 overflow-hidden pb-14 md:pb-0">
           {children}
         </main>

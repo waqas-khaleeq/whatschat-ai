@@ -10,13 +10,8 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import Dashboard from './pages/Dashboard';
 import Inbox from './pages/Inbox';
 import Leads from './pages/Leads';
-import CalendarPage from './pages/CalendarPage';
 import KnowledgeBase from './pages/KnowledgeBase';
 import AIAgent from './pages/AIAgent';
-import Automations from './pages/Automations';
-import Analytics from './pages/Analytics';
-import Integrations from './pages/Integrations';
-import Team from './pages/Team';
 import Settings from './pages/Settings';
 import SetupWizard from './pages/SetupWizard';
 // Add page imports here
@@ -49,13 +44,8 @@ const AuthenticatedApp = () => {
       <Route path="/" element={<Dashboard />} />
       <Route path="/inbox" element={<Inbox />} />
       <Route path="/leads" element={<Leads />} />
-      <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/knowledge" element={<KnowledgeBase />} />
       <Route path="/ai-agent" element={<AIAgent />} />
-      <Route path="/automations" element={<Automations />} />
-      <Route path="/analytics" element={<Analytics />} />
-      <Route path="/integrations" element={<Integrations />} />
-      <Route path="/team" element={<Team />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/setup" element={<SetupWizard />} />
       <Route path="*" element={<PageNotFound />} />
