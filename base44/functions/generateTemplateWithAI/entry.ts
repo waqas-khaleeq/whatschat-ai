@@ -44,8 +44,10 @@ Reply ONLY with this exact JSON structure, no markdown, no explanation outside J
       add_context_from_internet: false
     });
 
-    let jsonStr = res.response;
-    jsonStr = jsonStr.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    let jsonStr = res.response || res.data?.response || res;
+    if (typeof jsonStr === 'object') jsonStr = JSON.stringify(jsonStr);
+    jsonStr = jsonStr.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    
     const parsed = JSON.parse(jsonStr);
 
     return Response.json({
@@ -62,6 +64,7 @@ Reply ONLY with this exact JSON structure, no markdown, no explanation outside J
       }
     });
   } catch (error) {
+    console.error('generateTemplateWithAI error:', error);
     return Response.json({ success: false, error: error.message || 'AI returned an invalid format. Try again.' }, { status: 500 });
   }
 });
