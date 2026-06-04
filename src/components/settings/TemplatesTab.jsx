@@ -18,7 +18,7 @@ export default function TemplatesTab({ currentUser }) {
   }, []);
 
   const checkLastSync = async () => {
-    const settings = await base44.asServiceRole.entities.AppSettings.filter({
+    const settings = await base44.entities.AppSettings.filter({
       key: `template_last_synced_${currentUser.id}`
     });
     if (settings.length > 0) {
@@ -49,7 +49,7 @@ export default function TemplatesTab({ currentUser }) {
     if (res.data.success) {
       await fetchTemplates();
       setLastSynced(new Date());
-      await base44.asServiceRole.entities.AppSettings.create({
+      await base44.entities.AppSettings.create({
         key: `template_last_synced_${currentUser.id}`,
         value: new Date().toISOString(),
         category: 'templates'
