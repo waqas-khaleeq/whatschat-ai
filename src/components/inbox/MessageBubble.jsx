@@ -203,10 +203,10 @@ export default function MessageBubble({ msg, userId }) {
 
   if (isSystem && !isNote) {
     return (
-      <div className="flex justify-center my-3">
-        <div className="bg-[#e1f2fb] text-[#54656f] text-[11px] px-4 py-1.5 rounded-full shadow-sm max-w-xs text-center">
+      <div className="flex justify-center my-2 px-4">
+        <p style={{ fontSize: 12, color: "#adb5bd", fontStyle: "italic", textAlign: "center" }}>
           {msg.content}
-        </div>
+        </p>
       </div>
     );
   }

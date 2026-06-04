@@ -3,13 +3,13 @@ import { base44 } from "@/api/base44Client";
 import {
   Send, Bot, MoreVertical,
   StickyNote, Zap, X, Paperclip, Mic, Square,
-  Info, ChevronDown, ArrowLeft
+  Info, ChevronDown, ArrowLeft, AlertTriangle, CheckCircle, RotateCcw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
-import MessageBubble from "./MessageBubble";
-import MediaPreview from "./MediaPreview";
-import AIModeControl from "./AIModeControl";
+import MessageBubble from "@/components/inbox/MessageBubble";
+import MediaPreview from "@/components/inbox/MediaPreview";
+import AIModeControl from "@/components/inbox/AIModeControl";
 
 const QUICK_REPLIES = [
   "Thank you for reaching out! How can I help you today?",
@@ -44,34 +44,46 @@ function groupMessagesByDate(messages) {
   return groups;
 }
 
-export default function ChatArea({ conversation, onHandoverChange, onShowDetails, currentUser, onBack }) {
+export default function ChatArea({ conversation, onHandoverChange, onShowDetails, currentUser, onBack, onConversationUpdate }) {
   const [messages, setMessages] = useState([]);
   const [liveConv, setLiveConv] = useState(conversation);
   const [input, setInput] = useState("");
   const [noteMode, setNoteMode] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [recording, setRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
+  const menuRef = useRef(null);
 
-  // Keep liveConv in sync with prop
   useEffect(() => { setLiveConv(conversation); }, [conversation]);
 
   useEffect(() => {
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
     if (!conversation?.id) return;
+    setLoadingMessages(true);
+    setSendError(null);
 
     base44.entities.Message.filter({ conversation_id: conversation.id }, "timestamp", 100)
       .then(msgs => {
         setMessages(msgs || []);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       })
-      .catch(() => setMessages([]));
+      .catch(() => setMessages([]))
+      .finally(() => setLoadingMessages(false));
 
     const unsubscribe = base44.entities.Message.subscribe((event) => {
       if (event.data?.conversation_id !== conversation.id) return;
@@ -145,8 +157,8 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   const sendMedia = async () => {
     if (!mediaPreview || !conversation) return;
     setSending(true);
+    setSendError(null);
 
-    // Convert file to base64
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -165,12 +177,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     });
 
     if (!res?.data?.success) {
-      alert("❌ Failed to send media:\n" + (res?.data?.error || "Unknown error"));
+      setSendError({ content: mediaPreview.name, type: "media", error: res?.data?.error });
       setSending(false);
       return;
     }
 
-    // Store with wa-media-id so it can be proxied back for display
     const storedMediaUrl = res.data.media_id ? `wa-media-id:${res.data.media_id}` : base64;
 
     await base44.entities.Message.create({
@@ -196,31 +207,9 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     setSending(false);
   };
 
-  const sendMessage = async () => {
-    if (mediaPreview) { await sendMedia(); return; }
-    if (!input.trim() || !conversation) return;
+  const doSendText = async (content) => {
     setSending(true);
-    const content = input.trim();
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-    if (noteMode) {
-      await base44.entities.Message.create({
-        conversation_id: conversation.id,
-        sender: "system",
-        message_type: "internal_note",
-        content,
-        timestamp: new Date().toISOString(),
-        status: "sent",
-        agent_name: currentUser?.full_name || "Agent",
-      });
-      await base44.entities.Conversation.update(conversation.id, {
-        last_message: "[Note] " + content,
-        last_message_time: new Date().toISOString(),
-      });
-      setSending(false);
-      return;
-    }
+    setSendError(null);
 
     const res = await base44.functions.invoke("sendWhatsAppMessage", {
       user_id: currentUser?.id,
@@ -230,9 +219,9 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     });
 
     if (!res?.data?.success) {
-      alert("❌ Message failed to send:\n" + (res?.data?.error || "Unknown error"));
+      setSendError({ content, type: "text", error: res?.data?.error });
       setSending(false);
-      return;
+      return false;
     }
 
     await base44.entities.Message.create({
@@ -252,6 +241,44 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     });
 
     setSending(false);
+    return true;
+  };
+
+  const sendMessage = async () => {
+    if (mediaPreview) { await sendMedia(); return; }
+    if (!input.trim() || !conversation) return;
+
+    const content = input.trim();
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    if (noteMode) {
+      setSending(true);
+      await base44.entities.Message.create({
+        conversation_id: conversation.id,
+        sender: "system",
+        message_type: "internal_note",
+        content,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        agent_name: currentUser?.full_name || "Agent",
+      });
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: "[Note] " + content,
+        last_message_time: new Date().toISOString(),
+      });
+      setSending(false);
+      return;
+    }
+
+    await doSendText(content);
+  };
+
+  const handleRetry = async () => {
+    if (!sendError?.content || sendError.type !== "text") return;
+    const content = sendError.content;
+    setSendError(null);
+    await doSendText(content);
   };
 
   const handleModeChange = (newMode) => {
@@ -263,19 +290,52 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     onHandoverChange?.(newMode);
   };
 
+  const handleMarkResolved = async () => {
+    setShowMenu(false);
+    await base44.entities.Conversation.update(liveConv.id, { status: "closed" });
+    await base44.entities.Message.create({
+      conversation_id: liveConv.id,
+      sender: "system",
+      message_type: "system",
+      content: "Conversation closed",
+      timestamp: new Date().toISOString(),
+      status: "sent",
+    });
+    const updated = { ...liveConv, status: "closed" };
+    setLiveConv(updated);
+    onConversationUpdate?.(updated);
+  };
+
+  const handleReopen = async () => {
+    setShowMenu(false);
+    await base44.entities.Conversation.update(liveConv.id, { status: "open" });
+    await base44.entities.Message.create({
+      conversation_id: liveConv.id,
+      sender: "system",
+      message_type: "system",
+      content: "Conversation reopened",
+      timestamp: new Date().toISOString(),
+      status: "sent",
+    });
+    const updated = { ...liveConv, status: "open" };
+    setLiveConv(updated);
+    onConversationUpdate?.(updated);
+  };
+
   if (!conversation) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5]">
         <div className="w-24 h-24 rounded-full bg-white shadow-md flex items-center justify-center mb-5">
           <Bot className="w-12 h-12 text-[#128c7e]" />
         </div>
-        <h3 className="text-xl font-light text-[#41525d] mb-2">WhatsHub Inbox</h3>
-        <p className="text-sm text-[#667781]">Select a conversation to start messaging</p>
+        <h3 className="text-xl font-light text-[#41525d] mb-2">WhatsChat AI</h3>
+        <p className="text-sm text-[#667781]">Select a conversation to start chatting</p>
       </div>
     );
   }
 
   const aiMode = liveConv?.handling_mode === "ai" && !liveConv?.ai_paused;
+  const isClosed = liveConv?.status === "closed";
   const initials = (liveConv?.customer_name || liveConv?.customer_phone || "?")[0].toUpperCase();
   const grouped = groupMessagesByDate(messages);
   const userId = currentUser?.id;
@@ -285,12 +345,8 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       {/* Header */}
       <div className="flex items-center justify-between px-3 md:px-4 py-2.5 bg-[#f0f2f5] border-b border-[#e9edef] shrink-0 gap-2" style={{ minHeight: 64 }}>
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {/* Mobile back button */}
           {onBack && (
-            <button
-              onClick={onBack}
-              className="md:hidden w-11 h-11 rounded-full flex items-center justify-center hover:bg-[#e9edef] transition-colors shrink-0"
-            >
+            <button onClick={onBack} className="md:hidden w-11 h-11 rounded-full flex items-center justify-center hover:bg-[#e9edef] transition-colors shrink-0">
               <ArrowLeft className="w-5 h-5 text-[#54656f]" />
             </button>
           )}
@@ -303,9 +359,14 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-[#111b21] leading-none truncate">
-              {liveConv?.customer_name || liveConv?.customer_phone}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-[#111b21] leading-none truncate">
+                {liveConv?.customer_name || liveConv?.customer_phone}
+              </p>
+              {isClosed && (
+                <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full shrink-0">Closed</span>
+              )}
+            </div>
             <p className="text-xs text-[#667781] mt-0.5 truncate">
               {liveConv?.is_online ? "online" : liveConv?.customer_phone}
             </p>
@@ -317,18 +378,43 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
           <button
             onClick={onShowDetails}
             className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors"
-            title="Contact info"
           >
             <Info className="w-5 h-5 text-[#54656f]" />
           </button>
-          <button className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors">
-            <MoreVertical className="w-5 h-5 text-[#54656f]" />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu(v => !v)}
+              className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors"
+            >
+              <MoreVertical className="w-5 h-5 text-[#54656f]" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-10 z-50 bg-white rounded-xl shadow-xl border border-[#e9edef] min-w-[180px] py-1 overflow-hidden">
+                {!isClosed ? (
+                  <button
+                    onClick={handleMarkResolved}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-[#111b21] hover:bg-[#f0f2f5] transition-colors"
+                  >
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    Mark as Resolved
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleReopen}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-[#111b21] hover:bg-[#f0f2f5] transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4 text-blue-500" />
+                    Reopen Conversation
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Mode status banner */}
-      {!aiMode && (
+      {!aiMode && !isClosed && (
         <div className={cn(
           "flex items-center justify-center gap-2 py-1.5 text-xs font-medium border-b px-3",
           liveConv?.ai_paused
@@ -341,7 +427,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         </div>
       )}
 
-      {/* Chat area */}
+      {/* Chat messages */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -351,8 +437,12 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
           backgroundColor: "#e5ddd5",
         }}
       >
-        {grouped.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
+        {loadingMessages ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="w-7 h-7 border-2 border-[#128c7e]/30 border-t-[#128c7e] rounded-full animate-spin" />
+          </div>
+        ) : grouped.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full">
             <div className="bg-white/80 rounded-lg px-4 py-2 text-xs text-[#667781] shadow-sm">
               No messages yet. Say hello! 👋
             </div>
@@ -374,6 +464,22 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         >
           <ChevronDown className="w-5 h-5 text-[#54656f]" />
         </button>
+      )}
+
+      {/* Failed send error */}
+      {sendError && sendError.type === "text" && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border-t border-red-100">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+          <span className="text-xs text-red-600 flex-1 truncate">
+            Failed to send — {sendError.error || "tap to retry"}
+          </span>
+          <button onClick={handleRetry} className="text-xs font-semibold text-red-700 underline shrink-0">
+            Retry
+          </button>
+          <button onClick={() => setSendError(null)} className="p-0.5 rounded hover:bg-red-100 shrink-0">
+            <X className="w-3 h-3 text-red-400" />
+          </button>
+        </div>
       )}
 
       {showQuickReplies && (
@@ -433,87 +539,94 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         </div>
       )}
 
-      {/* Input bar */}
-      <div className="bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]">
-        {!mediaPreview && (
-          <>
-            <button
-              onClick={() => setShowQuickReplies(!showQuickReplies)}
-              className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
-              title="Quick replies"
-            >
-              <Zap className="w-5 h-5 text-[#54656f]" />
-            </button>
-            <button
-              onClick={() => setNoteMode(!noteMode)}
-              className={cn(
-                "w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0",
-                noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-[#e9edef] text-[#54656f]"
+      {/* Closed banner OR input bar */}
+      {isClosed ? (
+        <div className="bg-[#f0f2f5] border-t border-[#e9edef] px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-[#667781]">This conversation is closed. Reopen to reply.</p>
+          <button onClick={handleReopen} className="shrink-0 text-xs font-semibold text-[#128c7e] hover:text-[#0f7a6d] underline underline-offset-2">
+            Reopen
+          </button>
+        </div>
+      ) : (
+        <div className="bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]">
+          {!mediaPreview && (
+            <>
+              <button
+                onClick={() => setShowQuickReplies(!showQuickReplies)}
+                className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
+              >
+                <Zap className="w-5 h-5 text-[#54656f]" />
+              </button>
+              <button
+                onClick={() => setNoteMode(!noteMode)}
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0",
+                  noteMode ? "bg-amber-100 text-amber-600" : "hover:bg-[#e9edef] text-[#54656f]"
+                )}
+              >
+                <StickyNote className="w-5 h-5" />
+              </button>
+              {!noteMode && (
+                <>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <Paperclip className="w-5 h-5 text-[#54656f]" />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </>
               )}
-              title="Internal note"
+            </>
+          )}
+
+          {!mediaPreview && (
+            <div className={cn(
+              "flex-1 rounded-3xl px-4 py-2.5 flex items-end gap-2 shadow-sm",
+              noteMode ? "bg-amber-50 border border-amber-200" : "bg-white"
+            )}>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => { setInput(e.target.value); autoResize(e); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                }}
+                placeholder={noteMode ? "Write an internal note..." : "Type a message"}
+                className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed text-[#111b21] placeholder:text-[#667781] overflow-y-auto"
+                style={{ minHeight: 24, maxHeight: 120 }}
+                rows={1}
+              />
+            </div>
+          )}
+
+          {!mediaPreview && input.trim().length === 0 && !noteMode && !recording ? (
+            <button
+              onClick={handleVoiceRecord}
+              className="w-11 h-11 rounded-full flex items-center justify-center transition-colors shadow-sm shrink-0 bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
             >
-              <StickyNote className="w-5 h-5" />
+              <Mic className="w-5 h-5" />
             </button>
-            {!noteMode && (
-              <>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors shrink-0"
-                  title="Attach file"
-                >
-                  <Paperclip className="w-5 h-5 text-[#54656f]" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-              </>
-            )}
-          </>
-        )}
-
-        {!mediaPreview && (
-          <div className={cn(
-            "flex-1 rounded-3xl px-4 py-2.5 flex items-end gap-2 shadow-sm",
-            noteMode ? "bg-amber-50 border border-amber-200" : "bg-white"
-          )}>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => { setInput(e.target.value); autoResize(e); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-              }}
-              placeholder={noteMode ? "Write an internal note..." : "Type a message"}
-              className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed text-[#111b21] placeholder:text-[#667781] overflow-y-auto"
-              style={{ minHeight: 24, maxHeight: 120 }}
-              rows={1}
-            />
-          </div>
-        )}
-
-        {!mediaPreview && input.trim().length === 0 && !noteMode && !recording ? (
-          <button
-            onClick={handleVoiceRecord}
-            className="w-11 h-11 rounded-full flex items-center justify-center transition-colors shadow-sm shrink-0 bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
-            title="Record voice message"
-          >
-            <Mic className="w-5 h-5" />
-          </button>
-        ) : (
-          <button
-            onClick={sendMessage}
-            disabled={(input.trim().length === 0 && !mediaPreview) || sending}
-            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
-            title="Send message"
-          >
-            <Send className="w-5 h-5 text-white ml-0.5" />
-          </button>
-        )}
-      </div>
+          ) : (
+            <button
+              onClick={sendMessage}
+              disabled={(input.trim().length === 0 && !mediaPreview) || sending}
+              className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed bg-[#128c7e] hover:bg-[#0f7a6d] text-white"
+            >
+              {sending
+                ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <Send className="w-5 h-5 text-white ml-0.5" />
+              }
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

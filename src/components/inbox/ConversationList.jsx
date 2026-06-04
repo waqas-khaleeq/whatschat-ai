@@ -33,6 +33,18 @@ const modeColors = {
   pending: "border-l-gray-400",
 };
 
+function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 px-4 border-b border-[#f0f2f5] animate-pulse" style={{ height: 72 }}>
+      <div className="w-11 h-11 rounded-full bg-gray-200 shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3.5 bg-gray-200 rounded w-2/3" />
+        <div className="h-3 bg-gray-100 rounded w-4/5" />
+      </div>
+    </div>
+  );
+}
+
 export default function ConversationList({ conversations, selectedId, onSelect, onNewChat, loading }) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -68,7 +80,6 @@ export default function ConversationList({ conversations, selectedId, onSelect, 
             <MessageSquarePlus className="w-5 h-5 text-white" />
           </button>
         </div>
-        {/* Search */}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#667781]" />
           <input
@@ -101,74 +112,91 @@ export default function ConversationList({ conversations, selectedId, onSelect, 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="p-6 text-center text-[#667781] text-sm">Loading...</div>
+          <>
+            {[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}
+          </>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-[#667781] text-sm">No conversations found</div>
-        ) : filtered.map(conv => {
-          const name = conv.customer_name || conv.customer_phone || "?";
-          const initials = name[0].toUpperCase();
-          const isSelected = selectedId === conv.id;
-          const hasUnread = conv.unread_count > 0;
-          const modeColor = modeColors[conv.handling_mode] || modeColors.pending;
+          <div className="p-10 flex flex-col items-center justify-center gap-3 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#f0f2f5] flex items-center justify-center">
+              <Search className="w-7 h-7 text-[#adb5bd]" />
+            </div>
+            <p className="text-sm text-[#667781] max-w-[200px]">
+              {search || activeFilter !== "all"
+                ? "No conversations match your filter"
+                : "No conversations yet. Your WhatsApp messages will appear here."}
+            </p>
+          </div>
+        ) : (
+          filtered.map(conv => {
+            const name = conv.customer_name || conv.customer_phone || "?";
+            const initials = name[0].toUpperCase();
+            const isSelected = selectedId === conv.id;
+            const hasUnread = conv.unread_count > 0;
+            const modeColor = modeColors[conv.handling_mode] || modeColors.pending;
+            const isClosed = conv.status === "closed";
 
-          return (
-            <button
-              key={conv.id}
-              onClick={() => onSelect(conv)}
-              className={cn(
-                "w-full text-left flex items-center gap-3 px-4 border-b border-[#f0f2f5]",
-                "border-l-[3px] transition-colors cursor-pointer",
-                isSelected ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]",
-                modeColor
-              )}
-              style={{ height: 72, paddingTop: 12, paddingBottom: 12 }}
-            >
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <div className={cn(
-                  "w-11 h-11 rounded-full bg-gradient-to-br flex items-center justify-center shadow-sm",
-                  avatarColor(name)
-                )}>
-                  <span className="text-base font-bold text-white">{initials}</span>
-                </div>
-                {conv.is_online && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#25d366] rounded-full border-2 border-white" />
+            return (
+              <button
+                key={conv.id}
+                onClick={() => onSelect(conv)}
+                className={cn(
+                  "w-full text-left flex items-center gap-3 px-4 border-b border-[#f0f2f5]",
+                  "border-l-[3px] transition-colors cursor-pointer",
+                  isSelected ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]",
+                  isClosed ? "border-l-gray-300 opacity-70" : modeColor
                 )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className={cn(
-                    "text-[14px] truncate leading-tight",
-                    hasUnread ? "font-semibold text-[#111b21]" : "font-medium text-[#111b21]"
+                style={{ height: 72, paddingTop: 12, paddingBottom: 12 }}
+              >
+                <div className="relative shrink-0">
+                  <div className={cn(
+                    "w-11 h-11 rounded-full bg-gradient-to-br flex items-center justify-center shadow-sm",
+                    avatarColor(name)
                   )}>
-                    {name}
-                  </span>
-                  <span className={cn(
-                    "text-[11px] ml-1.5 shrink-0",
-                    hasUnread ? "text-[#128c7e] font-semibold" : "text-[#667781]"
-                  )}>
-                    {timeLabel(conv.last_message_time)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-1">
-                  <p className={cn(
-                    "text-[13px] truncate flex-1 leading-tight",
-                    hasUnread ? "text-[#111b21] font-medium" : "text-[#667781]"
-                  )}>
-                    {conv.last_message || "No messages yet"}
-                  </p>
-                  {hasUnread && (
-                    <div className="shrink-0 min-w-[20px] h-5 bg-[#25d366] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5">
-                      {conv.unread_count > 99 ? "99+" : conv.unread_count}
-                    </div>
+                    <span className="text-base font-bold text-white">{initials}</span>
+                  </div>
+                  {conv.is_online && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#25d366] rounded-full border-2 border-white" />
                   )}
                 </div>
-              </div>
-            </button>
-          );
-        })}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={cn(
+                        "text-[14px] truncate leading-tight",
+                        hasUnread ? "font-semibold text-[#111b21]" : "font-medium text-[#111b21]"
+                      )}>
+                        {name}
+                      </span>
+                      {isClosed && (
+                        <span className="text-[9px] font-semibold bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full shrink-0">Closed</span>
+                      )}
+                    </div>
+                    <span className={cn(
+                      "text-[11px] ml-1.5 shrink-0",
+                      hasUnread ? "text-[#128c7e] font-semibold" : "text-[#667781]"
+                    )}>
+                      {timeLabel(conv.last_message_time)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <p className={cn(
+                      "text-[13px] truncate flex-1 leading-tight",
+                      hasUnread ? "text-[#111b21] font-medium" : "text-[#667781]"
+                    )}>
+                      {conv.last_message || "No messages yet"}
+                    </p>
+                    {hasUnread && (
+                      <div className="shrink-0 min-w-[20px] h-5 bg-[#25d366] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5">
+                        {conv.unread_count > 99 ? "99+" : conv.unread_count}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );

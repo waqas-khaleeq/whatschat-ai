@@ -6,6 +6,7 @@ import ConversationList from "@/components/inbox/ConversationList";
 import ChatArea from "@/components/inbox/ChatArea";
 import LeadPanel from "@/components/inbox/LeadPanel";
 import NewChatModal from "@/components/inbox/NewChatModal";
+import WaBanner from "@/components/inbox/WaBanner.jsx";
 
 const POLL_INTERVAL = 5000;
 
@@ -16,6 +17,7 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true);
   const [showNewChat, setShowNewChat] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [waConfig, setWaConfig] = useState(null);
   const [activeView, setActiveView] = useState("list"); // "list" | "chat"
   const navigate = useNavigate();
   const pollRef = useRef(null);
@@ -30,6 +32,7 @@ export default function Inbox() {
     base44.entities.UserWAConfig.filter({ user_id: currentUser.id, is_active: true })
       .then(configs => {
         if (!configs.length) { navigate("/setup"); return; }
+        setWaConfig(configs[0]);
 
         const params = new URLSearchParams(window.location.search);
         const id = params.get("id");
@@ -83,6 +86,11 @@ export default function Inbox() {
     handleUpdate(updated);
   };
 
+  const handleConversationUpdate = (updated) => {
+    setConversations(prev => prev.map(c => c.id === updated.id ? updated : c));
+    if (selected?.id === updated.id) setSelected(updated);
+  };
+
   const handleNewConversation = (conv) => {
     setConversations(prev => prev.some(c => c.id === conv.id) ? prev : [conv, ...prev]);
     setSelected(conv);
@@ -96,8 +104,12 @@ export default function Inbox() {
 
   return (
     <AppLayout>
+      <div className="h-full flex flex-col overflow-hidden">
+      {/* WhatsApp disconnected banner */}
+      <WaBanner config={waConfig} />
+
       {/* Desktop: grid layout. Mobile: full screen with view switching */}
-      <div className="h-full overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex">
         {/* Conversation List — hidden on mobile when chat is active */}
         <div
           className={`
@@ -129,6 +141,7 @@ export default function Inbox() {
             onShowDetails={() => setShowDetails(true)}
             currentUser={currentUser}
             onBack={handleBack}
+            onConversationUpdate={handleConversationUpdate}
           />
 
           {showDetails && (
@@ -139,6 +152,8 @@ export default function Inbox() {
             />
           )}
         </div>
+      </div>
+
       </div>
 
       {showNewChat && (
