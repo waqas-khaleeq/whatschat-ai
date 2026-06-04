@@ -79,10 +79,10 @@ export default function Dashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={MessageSquare} label="Total Conversations" value={loading ? "..." : stats.total} sub={`${stats.unread} unread`} color="bg-blue-50 text-blue-600" trend="+12% this week" />
-          <StatCard icon={Users} label="New Leads" value={loading ? "..." : stats.new} sub="Today" color="bg-violet-50 text-violet-600" trend="+8% vs yesterday" />
-          <StatCard icon={Bot} label="AI Handled" value={loading ? "..." : stats.aiHandled} sub={`${stats.total ? Math.round((stats.aiHandled/stats.total)*100) : 0}% automation rate`} color="bg-primary/10 text-primary" trend="Saving 4.2hrs/day" />
-          <StatCard icon={Calendar} label="Appointments" value={loading ? "..." : stats.appointments} sub="Scheduled / confirmed" color="bg-amber-50 text-amber-600" trend="+3 today" />
+          <StatCard icon={MessageSquare} label="Total Conversations" value={loading ? "..." : stats.total} sub={`${stats.unread} unread`} color="bg-blue-50 text-blue-600" />
+          <StatCard icon={Users} label="New Leads" value={loading ? "..." : stats.new} sub="Awaiting contact" color="bg-violet-50 text-violet-600" />
+          <StatCard icon={Bot} label="AI Handled" value={loading ? "..." : stats.aiHandled} sub={`${stats.total ? Math.round((stats.aiHandled/stats.total)*100) : 0}% automation rate`} color="bg-primary/10 text-primary" />
+          <StatCard icon={Calendar} label="Appointments" value={loading ? "..." : stats.appointments} sub="Scheduled / confirmed" color="bg-amber-50 text-amber-600" />
         </div>
 
         {/* Quick Actions */}

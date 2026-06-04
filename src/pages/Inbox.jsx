@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import AppLayout from "@/components/layout/AppLayout";
@@ -17,8 +17,28 @@ export default function Inbox() {
   const [currentUser, setCurrentUser] = useState(null);
   const [waConfig, setWaConfig] = useState(null);
   const [activeView, setActiveView] = useState("list"); // "list" | "chat"
+  const [listWidth, setListWidth] = useState(280);
+  const isResizing = useRef(false);
   const navigate = useNavigate();
   const convUnsubRef = useRef(null);
+
+  const startResize = useCallback((e) => {
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startWidth = listWidth;
+    const onMove = (e) => {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(480, Math.max(200, startWidth + e.clientX - startX));
+      setListWidth(newWidth);
+    };
+    const onUp = () => {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [listWidth]);
 
   useEffect(() => {
     base44.auth.me().then(u => setCurrentUser(u)).catch(() => {});
@@ -130,11 +150,16 @@ export default function Inbox() {
         {/* Conversation List — hidden on mobile when chat is active */}
         <div
           className={`
-            h-full border-r border-[#e9edef] bg-white shrink-0
-            md:w-[280px] md:block
-            ${activeView === "list" ? "w-full block" : "hidden"}
+            h-full border-r border-[#e9edef] bg-white shrink-0 relative
+            md:block
+            ${activeView === "list" ? "block" : "hidden md:block"}
           `}
+          style={{ width: listWidth }}
         >
+          <div
+            className="hidden md:block absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 z-10 transition-colors"
+            onMouseDown={startResize}
+          />
           <ConversationList
             conversations={conversations}
             selectedId={selected?.id}
