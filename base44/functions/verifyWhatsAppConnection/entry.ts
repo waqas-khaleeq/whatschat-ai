@@ -21,11 +21,8 @@ Deno.serve(async (req) => {
     }
     const userConfig = configs[0];
 
-    // Use the public app URL for the webhook (req.url origin is internal/deno, not public)
-    const appId = Deno.env.get("BASE44_APP_ID") || "";
-    const webhookUrl = appId
-      ? `https://app--${appId}.base44.app/functions/whatsappWebhook`
-      : new URL(req.url).origin + "/functions/whatsappWebhook";
+    // Fixed public webhook URL — same for all users
+    const webhookUrl = "https://whatchat-ai.base44.app/functions/whatsappWebhook";
 
     const metaRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}`, {
       headers: { "Authorization": `Bearer ${userConfig.access_token}` },

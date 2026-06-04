@@ -276,8 +276,8 @@ export default function Settings() {
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Callback URL <span className="text-primary">(paste this in Meta)</span></label>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <input readOnly value={waConfig.webhook_url || `https://app--${window.location.hostname.match(/app--([^.]+)/)?.[1] || ""}.base44.app/functions/whatsappWebhook`} className="flex-1 px-3 py-2 text-xs bg-muted rounded-lg border-0 outline-none font-mono" />
-                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(waConfig.webhook_url || `https://app--${window.location.hostname.match(/app--([^.]+)/)?.[1] || ""}.base44.app/functions/whatsappWebhook`)}>
+                    <input readOnly value="https://whatchat-ai.base44.app/functions/whatsappWebhook" className="flex-1 px-3 py-2 text-xs bg-muted rounded-lg border-0 outline-none font-mono" />
+                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard("https://whatchat-ai.base44.app/functions/whatsappWebhook")}>
                       <Copy className="w-3.5 h-3.5" /> Copy
                     </Button>
                   </div>
