@@ -8,7 +8,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { user_id, template_name, display_name, category, language_code = 'en', header_type = 'NONE', header_text = '', body_text, footer_text = '', buttons = [] } = await req.json();
+    const body_json = await req.json();
+    const user_id = user?.id;
+    const { template_name, display_name, category, language_code = 'en', header_type = 'NONE', header_text = '', body_text, footer_text = '', buttons = [] } = body_json;
 
     // Step 1: Lookup UserWAConfig
     const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id, is_active: true });
