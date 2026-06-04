@@ -1,0 +1,109 @@
+{
+  "name": "MessageTemplate",
+  "type": "object",
+  "properties": {
+    "owner_user_id": {
+      "type": "string",
+      "description": "Links to UserWAConfig"
+    },
+    "meta_template_id": {
+      "type": "string",
+      "description": "Meta's internal ID returned on creation"
+    },
+    "template_name": {
+      "type": "string",
+      "description": "Lowercase, underscores only e.g. first_contact"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Friendly name shown in UI"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "UTILITY",
+        "MARKETING",
+        "AUTHENTICATION"
+      ],
+      "description": "Template category"
+    },
+    "language_code": {
+      "type": "string",
+      "default": "en",
+      "description": "Language code"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "PAUSED",
+        "DISABLED"
+      ],
+      "default": "PENDING",
+      "description": "Meta approval status"
+    },
+    "header_type": {
+      "type": "string",
+      "enum": [
+        "TEXT",
+        "IMAGE",
+        "VIDEO",
+        "DOCUMENT",
+        "NONE"
+      ],
+      "default": "NONE",
+      "description": "Type of header"
+    },
+    "header_text": {
+      "type": "string",
+      "description": "Header text if header_type is TEXT"
+    },
+    "body_text": {
+      "type": "string",
+      "description": "Main message body with {{1}} {{2}} placeholders"
+    },
+    "footer_text": {
+      "type": "string",
+      "description": "Footer text (optional)"
+    },
+    "has_buttons": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether template has buttons"
+    },
+    "buttons_json": {
+      "type": "string",
+      "description": "Buttons array stored as JSON string"
+    },
+    "variable_count": {
+      "type": "number",
+      "description": "Auto-calculated count of {{N}} in body_text"
+    },
+    "variable_labels": {
+      "type": "string",
+      "description": "JSON array of variable labels e.g. [\"Customer Name\", \"Date\"]"
+    },
+    "rejection_reason": {
+      "type": "string",
+      "description": "Meta's reason if status is REJECTED"
+    },
+    "last_synced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When status was last checked with Meta"
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When submitted to Meta API"
+    }
+  },
+  "required": [
+    "owner_user_id",
+    "template_name",
+    "body_text",
+    "category"
+  ]
+}

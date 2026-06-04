@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
 
     const body = await req.json();
-    const { user_id, phone, message, media_url, media_base64, media_type, media_name, caption, conversation_id } = body;
+    const { user_id, phone, message, media_url, media_base64, media_type, media_name, caption, conversation_id, template_name, language_code, template_variables } = body;
 
     if (!phone) {
       return Response.json({ success: false, error: "phone is required", whatsapp_message_id: null, error_code: "MISSING_PHONE" });
@@ -57,6 +57,104 @@ Deno.serve(async (req) => {
           error: null,
           error_code: null,
         });
+      }
+    }
+
+    // Handle template sending vs free-form
+    if (template_name && template_variables) {
+      const msgPayload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: toPhone,
+        type: "template",
+        template: {
+          name: template_name,
+          language: { code: language_code || "en" },
+          components: [
+            {
+              type: "body",
+              parameters: template_variables.map(v => ({ type: "text", text: String(v) }))
+            }
+          ]
+        }
+      };
+
+      console.log(`Sending template '${template_name}' to ${toPhone}`);
+
+      const delays = [0, 1000, 2000];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await sleep(delays[attempt]);
+
+        const sendRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${userConfig.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(msgPayload),
+        });
+
+        const sendData = await sendRes.json();
+
+        // Template-specific error handling
+        if (!sendRes.ok) {
+          const errCode = sendData.error?.code;
+          if (errCode === 131047) {
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error_code: "WINDOW_CLOSED",
+              error: "24-hour messaging window closed. Use a template to contact this person."
+            });
+          }
+          if (errCode === 132000) {
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error_code: "TEMPLATE_NOT_FOUND",
+              error: "Template not found on Meta. Sync your templates in Settings → Templates."
+            });
+          }
+          if (errCode === 132001) {
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error_code: "TEMPLATE_PAUSED",
+              error: "This template is paused by Meta. Choose a different template."
+            });
+          }
+          if (errCode === 131026) {
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error_code: "PHONE_NOT_WA",
+              error: "This phone number is not registered on WhatsApp."
+            });
+          }
+          if (sendRes.status === 401) {
+            await base44.asServiceRole.entities.UserWAConfig.update(userConfig.id, {
+              connection_status: "error",
+              error_message: "Token expired"
+            });
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error: "WhatsApp token expired. Please reconnect in Settings.",
+              error_code: "TOKEN_EXPIRED"
+            });
+          }
+          if (attempt === 2) {
+            return Response.json({
+              success: false,
+              whatsapp_message_id: null,
+              error: sendData.error?.message || "Failed to send template",
+              error_code: "SEND_FAILED"
+            });
+          }
+        } else {
+          const waMessageId = sendData.messages?.[0]?.id || null;
+          return Response.json({ success: true, whatsapp_message_id: waMessageId, error: null, error_code: null });
+        }
       }
     }
 

@@ -12,10 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 import PipelineSettings from "@/components/settings/PipelineSettings";
+import TemplatesTab from "@/components/settings/TemplatesTab";
 
 const SECTIONS = [
   { key: "whatsapp", label: "WhatsApp", icon: Smartphone },
   { key: "ai", label: "AI Agent", icon: Bot },
+  { key: "templates", label: "Templates", icon: Tag },
   { key: "pipeline", label: "Lead Pipeline", icon: Tag },
 ];
 
@@ -558,6 +560,9 @@ export default function Settings() {
          );
 
 
+
+      case "templates":
+        return <TemplatesTab currentUser={currentUser} />;
 
       case "pipeline":
         return <PipelineSettings />;
