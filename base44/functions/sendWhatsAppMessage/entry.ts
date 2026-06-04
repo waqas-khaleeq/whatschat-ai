@@ -22,17 +22,21 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, error: "user_id is required", whatsapp_message_id: null, error_code: "MISSING_USER_ID" });
     }
 
-    // Look up user WhatsApp config
-    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id, is_active: true });
+    // Look up user WhatsApp config — fall back to any active config if user-specific not found
+    let configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id, is_active: true });
+    if (!configs.length) {
+      configs = await base44.asServiceRole.entities.UserWAConfig.filter({ is_active: true });
+    }
     if (!configs.length) {
       return Response.json({
         success: false,
-        error: "WhatsApp not configured for this user. Please complete setup.",
+        error: "WhatsApp not configured. Please complete setup.",
         whatsapp_message_id: null,
         error_code: "NO_CONFIG",
       });
     }
     const userConfig = configs[0];
+    console.log(`Using WA config for user_id=${userConfig.user_id}, phone_number_id=${userConfig.phone_number_id}`);
 
     const toPhone = String(phone).replace(/[^\d]/g, "");
 
