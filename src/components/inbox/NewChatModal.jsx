@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { X, MessageSquarePlus, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function NewChatModal({ onClose, onConversationCreated }) {
+export default function NewChatModal({ onClose, onConversationCreated, currentUser }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [firstMessage, setFirstMessage] = useState("");
@@ -34,24 +34,27 @@ export default function NewChatModal({ onClose, onConversationCreated }) {
     const digits = normalizePhone(phone);
 
     try {
-      // 1. Find or create conversation
-      let conversations = await base44.entities.Conversation.filter({ customer_phone: digits });
+      // 1. Find or create conversation (scoped to current user)
+      const userId = currentUser?.id;
+      let conversations = await base44.entities.Conversation.filter({ customer_phone: digits, owner_user_id: userId });
       let conversation = conversations[0];
 
       if (!conversation) {
         conversation = await base44.entities.Conversation.create({
+          owner_user_id: userId,
           customer_phone: digits,
           customer_name: name.trim() || digits,
           last_message: firstMessage.trim(),
           last_message_time: new Date().toISOString(),
           unread_count: 0,
           status: "contacted",
-          handling_mode: "human", // agent-initiated, so human mode
+          handling_mode: "human",
         });
       }
 
       // 2. Send via WhatsApp API
       const res = await base44.functions.invoke("sendWhatsAppMessage", {
+        user_id: userId,
         phone: digits,
         message: firstMessage.trim(),
       });

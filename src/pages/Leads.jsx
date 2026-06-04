@@ -26,8 +26,13 @@ export default function Leads() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const [currentUser, setCurrentUser] = useState(null);
+
   useEffect(() => {
-    base44.entities.Conversation.list("-last_message_time", 200)
+    base44.auth.me().then(u => {
+      setCurrentUser(u);
+      return base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 200);
+    })
       .then(setLeads)
       .finally(() => setLoading(false));
   }, []);

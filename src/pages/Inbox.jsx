@@ -33,13 +33,9 @@ export default function Inbox() {
         // Load conversations
         const params = new URLSearchParams(window.location.search);
         const id = params.get("id");
-        base44.entities.Conversation.list("-last_message_time", 100)
+        base44.entities.Conversation.filter({ owner_user_id: currentUser.id }, "-last_message_time", 100)
           .then((data) => {
-            const real = data.filter(c =>
-              c.created_by?.startsWith("service+") ||
-              /^\d{10,15}$/.test((c.customer_phone || "").replace(/\+/g, ""))
-            );
-            setConversations(real);
+            setConversations(data);
             if (id) {
               const found = data.find((c) => c.id === id);
               if (found) setSelected(found);
@@ -120,6 +116,7 @@ export default function Inbox() {
         <NewChatModal
           onClose={() => setShowNewChat(false)}
           onConversationCreated={handleNewConversation}
+          currentUser={currentUser}
         />
       )}
     </AppLayout>

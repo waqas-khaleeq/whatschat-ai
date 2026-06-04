@@ -20,9 +20,8 @@
     "display_name": {
       "type": "string"
     },
-    "webhook_registered": {
-      "type": "boolean",
-      "default": false
+    "webhook_url": {
+      "type": "string"
     },
     "is_active": {
       "type": "boolean",

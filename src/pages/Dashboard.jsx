@@ -36,7 +36,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.Conversation.list("-last_message_time", 20)
+    base44.auth.me().then(u =>
+      base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 20)
+    )
       .then(setConversations)
       .finally(() => setLoading(false));
   }, []);

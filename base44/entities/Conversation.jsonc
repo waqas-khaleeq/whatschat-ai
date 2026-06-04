@@ -2,6 +2,9 @@
   "name": "Conversation",
   "type": "object",
   "properties": {
+    "owner_user_id": {
+      "type": "string"
+    },
     "customer_name": {
       "type": "string"
     },
@@ -126,6 +129,7 @@
     }
   },
   "required": [
-    "customer_phone"
+    "customer_phone",
+    "owner_user_id"
   ]
 }
