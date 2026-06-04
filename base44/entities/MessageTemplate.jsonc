@@ -4,7 +4,7 @@
   "properties": {
     "owner_user_id": {
       "type": "string",
-      "description": "Links to UserWAConfig"
+      "description": "Links to the user who owns this template"
     },
     "meta_template_id": {
       "type": "string",
@@ -47,11 +47,11 @@
     "header_type": {
       "type": "string",
       "enum": [
+        "NONE",
         "TEXT",
         "IMAGE",
         "VIDEO",
-        "DOCUMENT",
-        "NONE"
+        "DOCUMENT"
       ],
       "default": "NONE",
       "description": "Type of header"

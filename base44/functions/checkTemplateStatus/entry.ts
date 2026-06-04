@@ -5,61 +5,42 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const { user_id, template_name } = await req.json();
 
-    if (!user_id || !template_name) {
-      return Response.json({ success: false, error: 'user_id and template_name required' }, { status: 400 });
+    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id, is_active: true });
+    const config = configs[0];
+    if (!config || !config.waba_id) {
+      return Response.json({ success: false, error: 'WhatsApp not configured.' }, { status: 400 });
     }
 
-    // Look up UserWAConfig
-    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({
-      user_id,
-      is_active: true
-    });
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${config.waba_id}/message_templates?name=${encodeURIComponent(template_name)}&fields=id,name,status,rejected_reason`,
+      { headers: { 'Authorization': `Bearer ${config.access_token}` } }
+    );
 
-    if (!configs.length || !configs[0].waba_id) {
-      return Response.json({ success: false, error: 'WhatsApp not configured' }, { status: 400 });
+    const data = await response.json();
+    if (data.error) {
+      return Response.json({ success: false, error: data.error.message }, { status: 400 });
     }
 
-    const userConfig = configs[0];
-
-    // Call Meta API
-    const url = `https://graph.facebook.com/v18.0/${userConfig.waba_id}/message_templates?name=${encodeURIComponent(template_name)}&fields=id,name,status,rejected_reason`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${userConfig.access_token}` }
-    });
-
-    if (res.status === 401) {
-      return Response.json({ success: false, error: 'Access token expired' }, { status: 401 });
+    const template = data.data?.find(t => t.name === template_name);
+    if (!template) {
+      return Response.json({ success: false, error: 'Template not found.' }, { status: 404 });
     }
 
-    const data = await res.json();
-    const metaTemplate = data.data?.[0];
-
-    if (!metaTemplate) {
-      return Response.json({ success: false, error: 'Template not found on Meta' }, { status: 404 });
-    }
-
-    // Update local record
-    const localTemps = await base44.asServiceRole.entities.MessageTemplate.filter({
-      owner_user_id: user_id,
-      template_name: template_name
-    });
-
-    if (localTemps.length > 0) {
-      await base44.asServiceRole.entities.MessageTemplate.update(localTemps[0].id, {
-        status: metaTemplate.status,
-        rejection_reason: metaTemplate.rejected_reason || '',
+    const existing = (await base44.asServiceRole.entities.MessageTemplate.filter({ owner_user_id: user_id, template_name }));
+    if (existing.length > 0) {
+      await base44.asServiceRole.entities.MessageTemplate.update(existing[0].id, {
+        status: template.status,
+        rejection_reason: template.rejected_reason || undefined,
         last_synced_at: new Date().toISOString()
       });
     }
 
     return Response.json({
       success: true,
-      status: metaTemplate.status,
-      rejection_reason: metaTemplate.rejected_reason || null
+      status: template.status,
+      rejection_reason: template.rejected_reason || null
     });
-
   } catch (error) {
-    console.error('checkTemplateStatus error:', error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 });

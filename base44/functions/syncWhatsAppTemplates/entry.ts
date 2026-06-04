@@ -1,150 +1,109 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-async function fetchAllPages(url, accessToken) {
-  let allData = [];
-  let pageCount = 0;
-  let nextUrl = url;
-
-  while (nextUrl && pageCount < 5) {
-    const res = await fetch(nextUrl, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-
-    if (res.status === 401) {
-      throw { code: 401, message: 'Access token expired' };
-    }
-
-    const data = await res.json();
-    allData = allData.concat(data.data || []);
-    nextUrl = data.paging?.cursors?.after ? `${url}&after=${data.paging.cursors.after}` : null;
-    pageCount++;
-  }
-
-  return allData;
-}
-
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const { user_id } = await req.json();
 
-    if (!user_id) {
-      return Response.json({ success: false, error: 'user_id required' }, { status: 400 });
+    // Step 1: Lookup UserWAConfig
+    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id, is_active: true });
+    const config = configs[0];
+    if (!config || !config.waba_id) {
+      return Response.json({ success: false, error: 'WhatsApp not configured or WABA ID missing.' }, { status: 400 });
     }
 
-    // Look up UserWAConfig
-    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({
-      user_id,
-      is_active: true
-    });
+    // Step 2: Fetch with pagination
+    const allTemplates = [];
+    let url = `https://graph.facebook.com/v18.0/${config.waba_id}/message_templates?fields=id,name,status,category,language,components,rejected_reason&limit=100`;
+    
+    for (let i = 0; i < 5; i++) {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${config.access_token}` }
+      });
 
-    if (!configs.length || !configs[0].waba_id) {
-      return Response.json({
-        success: false,
-        error: 'WhatsApp Business Account not configured'
-      }, { status: 400 });
-    }
-
-    const userConfig = configs[0];
-    const url = `https://graph.facebook.com/v18.0/${userConfig.waba_id}/message_templates?fields=id,name,status,category,language,components,rejected_reason&limit=100`;
-
-    // Fetch all pages
-    let templates;
-    try {
-      templates = await fetchAllPages(url, userConfig.access_token);
-    } catch (err) {
-      if (err.code === 401) {
-        await base44.asServiceRole.entities.UserWAConfig.update(userConfig.id, {
-          connection_status: 'error'
-        });
-        return Response.json({
-          success: false,
-          error: 'Access token expired. Please reconnect in Settings.'
-        }, { status: 401 });
+      const data = await response.json();
+      if (data.error) {
+        if (data.error.code === 401) {
+          await base44.asServiceRole.entities.UserWAConfig.update(config.id, { connection_status: 'error' });
+          return Response.json({ success: false, error: 'Token expired. Please reconnect WhatsApp in Settings.' }, { status: 401 });
+        }
+        return Response.json({ success: false, error: data.error.message }, { status: 400 });
       }
-      throw err;
+
+      if (data.data) {
+        allTemplates.push(...data.data);
+      }
+
+      if (!data.paging || !data.paging.next) break;
+      url = data.paging.next;
     }
 
-    let approved = 0;
-    let pending = 0;
-    let rejected = 0;
-    let paused = 0;
-
-    // Process each template
-    for (const template of templates) {
-      const bodyComp = template.components.find(c => c.type === 'BODY');
-      const headerComp = template.components.find(c => c.type === 'HEADER');
-      const footerComp = template.components.find(c => c.type === 'FOOTER');
-      const buttonsComp = template.components.find(c => c.type === 'BUTTONS');
+    // Step 3: Sync each template
+    let stats = { approved: 0, pending: 0, rejected: 0, paused: 0, total: allTemplates.length };
+    
+    for (const metaTemplate of allTemplates) {
+      const bodyComp = metaTemplate.components.find(c => c.type === 'BODY');
+      const headerComp = metaTemplate.components.find(c => c.type === 'HEADER');
+      const footerComp = metaTemplate.components.find(c => c.type === 'FOOTER');
+      const buttonsComp = metaTemplate.components.find(c => c.type === 'BUTTONS');
 
       const bodyText = bodyComp?.text || '';
       const headerType = headerComp?.format || 'NONE';
       const headerText = headerComp?.text || '';
       const footerText = footerComp?.text || '';
       const buttons = buttonsComp?.buttons || [];
-
       const variableCount = (bodyText.match(/\{\{\d+\}\}/g) || []).length;
 
-      // Count statuses
-      if (template.status === 'APPROVED') approved++;
-      else if (template.status === 'PENDING') pending++;
-      else if (template.status === 'REJECTED') rejected++;
-      else if (template.status === 'PAUSED') paused++;
-
-      // Find or create record
-      const existing = await base44.asServiceRole.entities.MessageTemplate.filter({
-        owner_user_id: user_id,
-        template_name: template.name
-      });
-
+      const existing = (await base44.asServiceRole.entities.MessageTemplate.filter({ owner_user_id: user_id, template_name: metaTemplate.name }));
+      
       if (existing.length > 0) {
         await base44.asServiceRole.entities.MessageTemplate.update(existing[0].id, {
-          status: template.status,
-          meta_template_id: template.id,
+          status: metaTemplate.status,
           body_text: bodyText,
           header_type: headerType,
-          header_text: headerText,
-          footer_text: footerText,
+          header_text: headerText || undefined,
+          footer_text: footerText || undefined,
           has_buttons: buttons.length > 0,
-          buttons_json: buttons.length > 0 ? JSON.stringify(buttons) : '',
+          buttons_json: buttons.length > 0 ? JSON.stringify(buttons) : undefined,
           variable_count: variableCount,
-          rejection_reason: template.rejected_reason || '',
+          rejection_reason: metaTemplate.rejected_reason || undefined,
           last_synced_at: new Date().toISOString()
         });
       } else {
         await base44.asServiceRole.entities.MessageTemplate.create({
           owner_user_id: user_id,
-          meta_template_id: template.id,
-          template_name: template.name,
-          display_name: template.name,
-          category: template.category || 'UTILITY',
-          language_code: template.language || 'en',
-          status: template.status,
+          meta_template_id: metaTemplate.id,
+          template_name: metaTemplate.name,
+          display_name: metaTemplate.name,
+          category: metaTemplate.category,
+          language_code: metaTemplate.language,
+          status: metaTemplate.status,
           header_type: headerType,
-          header_text: headerText,
+          header_text: headerText || undefined,
           body_text: bodyText,
-          footer_text: footerText,
+          footer_text: footerText || undefined,
           has_buttons: buttons.length > 0,
-          buttons_json: buttons.length > 0 ? JSON.stringify(buttons) : '',
+          buttons_json: buttons.length > 0 ? JSON.stringify(buttons) : undefined,
           variable_count: variableCount,
-          rejection_reason: template.rejected_reason || '',
+          variable_labels: '[]',
+          rejection_reason: metaTemplate.rejected_reason || undefined,
           last_synced_at: new Date().toISOString()
         });
       }
+
+      if (metaTemplate.status === 'APPROVED') stats.approved++;
+      if (metaTemplate.status === 'PENDING') stats.pending++;
+      if (metaTemplate.status === 'REJECTED') stats.rejected++;
+      if (metaTemplate.status === 'PAUSED') stats.paused++;
     }
 
+    // Step 4: Return
     return Response.json({
       success: true,
-      total: templates.length,
-      approved,
-      pending,
-      rejected,
-      paused,
+      ...stats,
       synced_at: new Date().toISOString()
     });
-
   } catch (error) {
-    console.error('syncWhatsAppTemplates error:', error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 });

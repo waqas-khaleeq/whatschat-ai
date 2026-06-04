@@ -1,182 +1,209 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { RefreshCw, Plus, Trash2, Eye, CheckCircle, Clock, AlertCircle, Pause, X } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Eye, CheckCircle, Clock, AlertCircle, Pause, X, Copy, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import CreateTemplateModal from './CreateTemplateModal.jsx';
 
 export default function TemplatesTab({ currentUser }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [syncing, setsyncing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
   const [filter, setFilter] = useState('all');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showInfoBox, setShowInfoBox] = useState(false);
   const [stats, setStats] = useState({ approved: 0, pending: 0, rejected: 0, paused: 0 });
 
   useEffect(() => {
     fetchTemplates();
-    checkLastSync();
   }, []);
-
-  const checkLastSync = async () => {
-    const settings = await base44.entities.AppSettings.filter({
-      key: `template_last_synced_${currentUser.id}`
-    });
-    if (settings.length > 0) {
-      setLastSynced(new Date(settings[0].value));
-    }
-  };
 
   const fetchTemplates = async () => {
     setLoading(true);
-    const temps = await base44.entities.MessageTemplate.filter({ owner_user_id: currentUser.id });
-    setTemplates(temps);
-    updateStats(temps);
-    setLoading(false);
+    try {
+      const result = await base44.entities.MessageTemplate.filter({ owner_user_id: currentUser.id });
+      setTemplates(result || []);
+      calculateStats(result || []);
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updateStats = (temps) => {
-    setStats({
-      approved: temps.filter(t => t.status === 'APPROVED').length,
-      pending: temps.filter(t => t.status === 'PENDING').length,
-      rejected: temps.filter(t => t.status === 'REJECTED').length,
-      paused: temps.filter(t => t.status === 'PAUSED').length
+  const calculateStats = (items) => {
+    const stats = { approved: 0, pending: 0, rejected: 0, paused: 0 };
+    items.forEach(t => {
+      if (t.status === 'APPROVED') stats.approved++;
+      if (t.status === 'PENDING') stats.pending++;
+      if (t.status === 'REJECTED') stats.rejected++;
+      if (t.status === 'PAUSED') stats.paused++;
     });
+    setStats(stats);
   };
 
   const handleSync = async () => {
-    setsyncing(true);
-    const res = await base44.functions.invoke('syncWhatsAppTemplates', { user_id: currentUser.id });
-    if (res.data.success) {
-      await fetchTemplates();
-      setLastSynced(new Date());
-      await base44.entities.AppSettings.create({
-        key: `template_last_synced_${currentUser.id}`,
-        value: new Date().toISOString(),
-        category: 'templates'
-      });
+    setSyncing(true);
+    try {
+      const res = await base44.functions.invoke('syncWhatsAppTemplates', { user_id: currentUser.id });
+      if (res.data.success) {
+        setLastSynced(new Date());
+        fetchTemplates();
+      }
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      setSyncing(false);
     }
-    setsyncing(false);
+  };
+
+  const handleRefreshStatus = async (template) => {
+    try {
+      const res = await base44.functions.invoke('checkTemplateStatus', {
+        user_id: currentUser.id,
+        template_name: template.template_name
+      });
+      if (res.data.success) {
+        setTemplates(prev => prev.map(t => 
+          t.id === template.id ? { ...t, status: res.data.status, rejection_reason: res.data.rejection_reason } : t
+        ));
+        setSelectedTemplate(prev => prev ? { ...prev, status: res.data.status } : null);
+      }
+    } catch (error) {
+      console.error('Status check failed:', error);
+    }
   };
 
   const handleDelete = async (template) => {
     if (!confirm(`Delete template "${template.display_name}"?`)) return;
-    await base44.functions.invoke('deleteWhatsAppTemplate', {
-      user_id: currentUser.id,
-      template_name: template.template_name
-    });
-    fetchTemplates();
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'APPROVED': return 'bg-green-100 text-green-800';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'REJECTED': return 'bg-red-100 text-red-800';
-      case 'PAUSED': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+    try {
+      const res = await base44.functions.invoke('deleteWhatsAppTemplate', {
+        user_id: currentUser.id,
+        template_name: template.template_name
+      });
+      if (res.data.success) {
+        setTemplates(prev => prev.filter(t => t.id !== template.id));
+        setShowDetailModal(false);
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'APPROVED': return <CheckCircle className="w-4 h-4" />;
-      case 'PENDING': return <Clock className="w-4 h-4" />;
-      case 'REJECTED': return <AlertCircle className="w-4 h-4" />;
-      case 'PAUSED': return <Pause className="w-4 h-4" />;
-      default: return null;
-    }
+  const filteredTemplates = templates.filter(t => 
+    filter === 'all' || t.status === filter.toUpperCase()
+  );
+
+  const statusBadgeColor = {
+    APPROVED: 'bg-emerald-100 text-emerald-700',
+    PENDING: 'bg-amber-100 text-amber-700',
+    REJECTED: 'bg-red-100 text-red-700',
+    PAUSED: 'bg-orange-100 text-orange-700',
+    DISABLED: 'bg-gray-100 text-gray-700'
   };
 
-  const filteredTemplates = filter === 'all'
-    ? templates
-    : templates.filter(t => t.status === filter.toUpperCase());
+  const categoryColor = {
+    UTILITY: 'bg-blue-100 text-blue-700',
+    MARKETING: 'bg-orange-100 text-orange-700',
+    AUTHENTICATION: 'bg-purple-100 text-purple-700'
+  };
 
   return (
     <div className="space-y-6">
-      {/* How Templates Work */}
-      <details className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <summary className="cursor-pointer font-semibold text-blue-900 flex items-center gap-2">
-          <span>How Templates Work</span>
-        </summary>
-        <div className="mt-3 text-sm text-blue-800 space-y-2">
-          <p>WhatsApp has a strict rule:</p>
-          <ul className="list-disc ml-5 space-y-1">
-            <li>If a customer messages YOU first: you can reply freely for 24 hours</li>
-            <li>If you want to message someone who has NOT messaged you: you MUST use an approved template</li>
-          </ul>
-          <p className="mt-2 font-semibold">Process:</p>
-          <ol className="list-decimal ml-5 space-y-1">
-            <li>Create your template here (30 seconds with AI assist)</li>
-            <li>Submit it to Meta — they review automatically</li>
-            <li>Utility templates: usually approved in minutes</li>
-            <li>Marketing templates: can take a few hours</li>
-            <li>Once APPROVED: use it for new contacts</li>
-          </ol>
-          <p className="mt-2 font-semibold">Tips:</p>
-          <ul className="list-disc ml-5 space-y-1">
-            <li>Use UTILITY for transactional messages (follow-ups, reminders, confirmations)</li>
-            <li>Avoid URLs in first templates</li>
-            <li>Keep messages professional and relevant</li>
-          </ul>
+      {/* Header */}
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Message Templates</h2>
+          {lastSynced && (
+            <p className="text-sm text-muted-foreground">
+              Last synced: {Math.floor((Date.now() - lastSynced) / 60000)} minutes ago
+            </p>
+          )}
         </div>
-      </details>
-
-      {/* Header & Actions */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Message Templates</h3>
         <div className="flex gap-2">
-            <Button
-              onClick={handleSync}
-              disabled={syncing}
-              variant="outline"
-              className="gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync from Meta'}
-            </Button>
-            <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Create Template
-            </Button>
+          <Button
+            onClick={handleSync}
+            disabled={syncing}
+            variant="outline"
+            className="gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync from Meta'}
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Create Template
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Approved', count: stats.approved, color: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Pending', count: stats.pending, color: 'bg-amber-50 text-amber-700' },
+          { label: 'Rejected', count: stats.rejected, color: 'bg-red-50 text-red-700' },
+          { label: 'Paused', count: stats.paused, color: 'bg-orange-50 text-orange-700' }
+        ].map(stat => (
+          <div key={stat.label} className={`${stat.color} rounded-lg p-3 text-center`}>
+            <p className="text-2xl font-bold">{stat.count}</p>
+            <p className="text-xs font-medium">{stat.label}</p>
           </div>
+        ))}
       </div>
 
-      {/* Status Bar */}
-      <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Last synced: {lastSynced ? new Date(lastSynced).toLocaleString() : 'Never — sync to see your templates'}
-          </span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {stats.approved > 0 && (
-            <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
-              {stats.approved} Approved
+      {/* Info Box */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setShowInfoBox(!showInfoBox)}>
+          <CardTitle className="flex justify-between items-center text-base">
+            <span>How Templates Work</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showInfoBox ? 'rotate-180' : ''}`} />
+          </CardTitle>
+        </CardHeader>
+        {showInfoBox && (
+          <CardContent className="text-sm space-y-3 text-muted-foreground">
+            <div>
+              <p className="font-semibold text-foreground mb-1">WhatsApp 24-hour rule:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Customer messages you → you can reply freely for 24 hours</li>
+                <li>You message first (new contact) → you MUST use an approved template</li>
+              </ul>
             </div>
-          )}
-          {stats.pending > 0 && (
-            <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
-              {stats.pending} Pending
+            <div>
+              <p className="font-semibold text-foreground mb-1">How to get templates approved fast:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Use UTILITY for follow-ups, reminders, confirmations — approved in minutes</li>
+                <li>Use MARKETING for promotions — takes longer, stricter review</li>
+                <li>Avoid URLs, avoid promotional words (FREE, WIN, OFFER) in UTILITY templates</li>
+                <li>Keep body text concise and professional</li>
+              </ul>
             </div>
-          )}
-          {stats.rejected > 0 && (
-            <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
-              {stats.rejected} Rejected
+            <div>
+              <p className="font-semibold text-foreground mb-1">If your template is rejected:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Read the rejection reason shown in the template details</li>
+                <li>Edit content and resubmit with a slightly different name</li>
+                <li>Most common fix: switch category from MARKETING to UTILITY</li>
+              </ul>
             </div>
-          )}
-        </div>
-      </div>
+          </CardContent>
+        )}
+      </Card>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2 border-b">
-        {['all', 'approved', 'pending', 'rejected'].map(f => (
+      {/* Filters */}
+      <div className="flex gap-2">
+        {['all', 'approved', 'pending', 'rejected', 'paused'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 font-medium border-b-2 ${
-              filter === f ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+              filter === f
+                ? 'bg-primary text-white'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -186,69 +213,69 @@ export default function TemplatesTab({ currentUser }) {
 
       {/* Templates Table */}
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-        </div>
+        <div className="text-center py-8 text-muted-foreground">Loading templates...</div>
       ) : filteredTemplates.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-muted-foreground mb-4">No templates yet. Create your first template or sync from Meta to import existing ones.</p>
+        <div className="text-center py-12 bg-secondary rounded-lg">
+          <p className="text-muted-foreground mb-4">No templates found. Create your first template or sync from Meta.</p>
           <div className="flex gap-2 justify-center">
-            <Button variant="outline">Create Template</Button>
+            <Button variant="outline" onClick={() => setShowCreateModal(true)}>Create Template</Button>
             <Button variant="outline" onClick={handleSync}>Sync from Meta</Button>
           </div>
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary border-b">
               <tr>
-                <th className="text-left px-4 py-3 font-semibold text-sm">Name</th>
-                <th className="text-left px-4 py-3 font-semibold text-sm">Category</th>
-                <th className="text-left px-4 py-3 font-semibold text-sm">Status</th>
-                <th className="text-left px-4 py-3 font-semibold text-sm">Variables</th>
-                <th className="text-left px-4 py-3 font-semibold text-sm">Preview</th>
-                <th className="text-right px-4 py-3 font-semibold text-sm">Actions</th>
+                <th className="px-4 py-3 text-left font-semibold">Name</th>
+                <th className="px-4 py-3 text-left font-semibold">Category</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Variables</th>
+                <th className="px-4 py-3 text-left font-semibold">Preview</th>
+                <th className="px-4 py-3 text-left font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {filteredTemplates.map(template => (
-                <tr key={template.id} className="hover:bg-gray-50">
+            <tbody>
+              {filteredTemplates.map(t => (
+                <tr key={t.id} className="border-b hover:bg-secondary/50">
                   <td className="px-4 py-3">
                     <div>
-                      <div className="font-semibold">{template.display_name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{template.template_name}</div>
+                      <p className="font-semibold">{t.display_name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{t.template_name}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">{template.category}</span>
+                    <Badge className={categoryColor[t.category]}>{t.category}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <div className={`flex items-center gap-1 w-fit px-2 py-1 rounded text-xs font-semibold ${getStatusColor(template.status)}`}>
-                      {getStatusIcon(template.status)}
-                      {template.status}
+                    <Badge className={statusBadgeColor[t.status]}>{t.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-xs">{t.variable_count || 0} variables</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{t.body_text?.substring(0, 55)}...</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTemplate(t);
+                          setShowDetailModal(true);
+                        }}
+                        className="p-1.5 hover:bg-secondary rounded transition-colors"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRefreshStatus(t)}
+                        className="p-1.5 hover:bg-secondary rounded transition-colors"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(t)}
+                        className="p-1.5 hover:bg-red-50 text-red-600 rounded transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {template.variable_count > 0 ? `${template.variable_count} variables` : 'No variables'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-xs">
-                    {template.body_text.substring(0, 50)}...
-                  </td>
-                  <td className="px-4 py-3 text-right space-x-1">
-                    <button
-                      onClick={() => setSelectedTemplate(template)}
-                      className="p-1 hover:bg-gray-100 rounded inline-flex"
-                      title="View"
-                    >
-                      <Eye className="w-4 h-4 text-gray-600" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(template)}
-                      className="p-1 hover:bg-red-100 rounded inline-flex"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -258,98 +285,143 @@ export default function TemplatesTab({ currentUser }) {
       )}
 
       {/* Detail Modal */}
-      {selectedTemplate && (
+      {showDetailModal && selectedTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-start mb-4">
+          <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <CardHeader className="flex flex-row items-start justify-between border-b pb-4">
               <div>
-                <h2 className="text-2xl font-bold">{selectedTemplate.display_name}</h2>
+                <CardTitle>{selectedTemplate.display_name}</CardTitle>
                 <div className="flex gap-2 mt-2">
-                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusColor(selectedTemplate.status)}`}>
-                    {selectedTemplate.status}
-                  </span>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
-                    {selectedTemplate.category}
-                  </span>
+                  <Badge className={statusBadgeColor[selectedTemplate.status]}>{selectedTemplate.status}</Badge>
+                  <Badge className={categoryColor[selectedTemplate.category]}>{selectedTemplate.category}</Badge>
                 </div>
               </div>
-              <button onClick={() => setSelectedTemplate(null)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowDetailModal(false)} className="p-1">
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            <div className="space-y-4 text-sm">
+            </CardHeader>
+            <CardContent className="space-y-6 py-6">
+              {/* Template Name */}
               <div>
-                <label className="font-semibold text-muted-foreground">Template Name</label>
-                <code className="block bg-gray-100 p-2 rounded mt-1 break-all">{selectedTemplate.template_name}</code>
+                <label className="text-sm font-semibold block mb-2">Template Name</label>
+                <div className="flex items-center gap-2 bg-gray-100 p-3 rounded font-mono text-sm">
+                  {selectedTemplate.template_name}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(selectedTemplate.template_name)}
+                    className="ml-auto p-1 hover:bg-gray-200 rounded"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              {selectedTemplate.header_text && (
+              {/* Header */}
+              {selectedTemplate.header_type !== 'NONE' && selectedTemplate.header_text && (
                 <div>
-                  <label className="font-semibold text-muted-foreground">Header</label>
-                  <div className="bg-green-50 p-3 rounded mt-1">{selectedTemplate.header_text}</div>
+                  <label className="text-sm font-semibold block mb-2">Header</label>
+                  <div className="bg-gray-100 p-3 rounded text-sm">{selectedTemplate.header_text}</div>
                 </div>
               )}
 
+              {/* Body */}
               <div>
-                <label className="font-semibold text-muted-foreground">Body</label>
-                <div className="bg-white border border-gray-300 p-3 rounded mt-1 whitespace-pre-wrap break-words">
+                <label className="text-sm font-semibold block mb-2">Body</label>
+                <div className="bg-gray-50 p-3 rounded text-sm whitespace-pre-wrap">
                   {selectedTemplate.body_text.split(/(\{\{\d+\}\})/g).map((part, i) =>
-                    /\{\{\d+\}\}/.test(part) ? (
-                      <span key={i} className="bg-green-200 px-1 rounded font-semibold">{part}</span>
+                    part.match(/\{\{\d+\}\}/) ? (
+                      <span key={i} className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-semibold">
+                        {part}
+                      </span>
                     ) : (
-                      <span key={i}>{part}</span>
+                      part
                     )
                   )}
                 </div>
               </div>
 
+              {/* Footer */}
               {selectedTemplate.footer_text && (
                 <div>
-                  <label className="font-semibold text-muted-foreground">Footer</label>
-                  <div className="text-muted-foreground p-2 rounded mt-1">{selectedTemplate.footer_text}</div>
+                  <label className="text-sm font-semibold block mb-2">Footer</label>
+                  <div className="text-sm text-muted-foreground">{selectedTemplate.footer_text}</div>
                 </div>
               )}
 
+              {/* Buttons */}
+              {selectedTemplate.has_buttons && selectedTemplate.buttons_json && (
+                <div>
+                  <label className="text-sm font-semibold block mb-2">Buttons</label>
+                  <div className="flex flex-wrap gap-2">
+                    {JSON.parse(selectedTemplate.buttons_json).map((btn, i) => (
+                      <button key={i} className="px-3 py-1.5 border border-gray-300 rounded-full text-sm">
+                        {btn.text}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Variables */}
               {selectedTemplate.variable_count > 0 && (
                 <div>
-                  <label className="font-semibold text-muted-foreground">Variables</label>
-                  <ol className="list-decimal ml-5 mt-1">
-                    {selectedTemplate.variable_labels ? (
-                      JSON.parse(selectedTemplate.variable_labels).map((label, i) => (
-                        <li key={i}>{`{{${i + 1}}} = ${label}`}</li>
-                      ))
-                    ) : (
-                      Array.from({ length: selectedTemplate.variable_count }).map((_, i) => (
-                        <li key={i}>{`{{${i + 1}}}`}</li>
-                      ))
-                    )}
-                  </ol>
+                  <label className="text-sm font-semibold block mb-2">Variables</label>
+                  <div className="space-y-2">
+                    {JSON.parse(selectedTemplate.variable_labels || '[]').map((label, i) => (
+                      <div key={i} className="text-sm">
+                        <span className="font-mono bg-gray-100 px-2 py-1 rounded">{`{{${i + 1}}}`}</span>
+                        <span className="ml-2 text-muted-foreground">→ {label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
+              {/* Rejection Reason */}
               {selectedTemplate.status === 'REJECTED' && selectedTemplate.rejection_reason && (
-                <div className="bg-red-50 border border-red-200 p-3 rounded">
-                  <label className="font-semibold text-red-800">Rejection Reason</label>
-                  <p className="text-red-700 mt-1">{selectedTemplate.rejection_reason}</p>
+                <div className="bg-red-50 border border-red-200 p-4 rounded">
+                  <p className="text-sm font-semibold text-red-700 mb-1">Rejection Reason</p>
+                  <p className="text-sm text-red-600">{selectedTemplate.rejection_reason}</p>
                 </div>
               )}
-            </div>
 
-            <div className="mt-6 flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setSelectedTemplate(null)}>Close</Button>
-            </div>
-          </div>
+              {/* Last Synced */}
+              <p className="text-xs text-muted-foreground">
+                Synced {selectedTemplate.last_synced_at ? Math.floor((Date.now() - new Date(selectedTemplate.last_synced_at)) / 60000) + ' minutes ago' : 'never'}
+              </p>
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end border-t pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => handleRefreshStatus(selectedTemplate)}
+                  className="gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Refresh Status
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    handleDelete(selectedTemplate);
+                  }}
+                  className="gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        )}
+      )}
 
-        {/* Create Template Modal */}
-        <CreateTemplateModal
+      {/* Create Template Modal */}
+      <CreateTemplateModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         currentUser={currentUser}
         onSuccess={fetchTemplates}
-        />
-        </div>
-        );
-        }
+      />
+    </div>
+  );
+}

@@ -64,6 +64,15 @@
     },
     "agent_name": {
       "type": "string"
+    },
+    "is_template_message": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if this message was sent via a template"
+    },
+    "template_name": {
+      "type": "string",
+      "description": "Name of the template used, if is_template_message is true"
     }
   },
   "required": [
