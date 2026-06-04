@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Smartphone, Bot, Calendar, Tag, Bell,
   Wifi, WifiOff, Save, RefreshCw, CheckCircle,
-  Copy, ExternalLink, Users, Plug
+  Copy, ExternalLink, Users, Plug, Eye, EyeOff, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,30 +63,41 @@ export default function Settings() {
   const tabFromUrl = urlParams.get("tab");
   const [activeSection, setActiveSection] = useState(tabFromUrl || "whatsapp");
   const [saved, setSaved] = useState(false);
+  const navigate = useNavigate();
 
-  // WhatsApp settings
-  const [waConnected, setWaConnected] = useState(null); // null = loading
-  const [waConnectionInfo, setWaConnectionInfo] = useState(null);
-  const [waPhone, setWaPhone] = useState("");
-  const [waVerifyToken, setWaVerifyToken] = useState("Loading...");
-  const [testingWa, setTestingWa] = useState(false);
-  const [waTestResult, setWaTestResult] = useState(null);
-  const [checkingWa, setCheckingWa] = useState(true);
-  const WEBHOOK_URL = "https://app--69ff5fa3607b3fcc3cbe1d68.base44.app/api/apps/69ff5fa3607b3fcc3cbe1d68/functions/whatsappWebhook";
+  // WhatsApp settings — loaded from UserWAConfig
+  const [waConfig, setWaConfig] = useState(null);
+  const [waLoading, setWaLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Editable WA fields
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
+  const [waAccessToken, setWaAccessToken] = useState("");
+  const [waWabaId, setWaWabaId] = useState("");
+  const [waDisplayName, setWaDisplayName] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [waSaving, setWaSaving] = useState(false);
+  const [waCheckingConn, setWaCheckingConn] = useState(false);
+  const [waError, setWaError] = useState("");
+
+  const loadWAConfig = async (user) => {
+    const configs = await base44.entities.UserWAConfig.filter({ user_id: user.id, is_active: true });
+    if (!configs.length) return null;
+    const cfg = configs[0];
+    setWaConfig(cfg);
+    setWaPhoneNumberId(cfg.phone_number_id || "");
+    setWaAccessToken(cfg.access_token || "");
+    setWaWabaId(cfg.waba_id || "");
+    setWaDisplayName(cfg.display_name || "");
+    return cfg;
+  };
 
   useEffect(() => {
-    // Fetch verify token and calendar settings in parallel
     Promise.all([
-      base44.functions.invoke("whatsappWebhook", { _getVerifyToken: true })
-        .then(res => setWaVerifyToken(res.data?.verifyToken || ""))
-        .catch(() => setWaVerifyToken("")),
-      base44.functions.invoke("whatsappWebhook", { _checkConnection: true })
-        .then(res => {
-          setWaConnected(res.data?.connected === true);
-          setWaConnectionInfo(res.data);
-        })
-        .catch(() => setWaConnected(false)),
-      // Load saved calendar settings from database
+      base44.auth.me().then(u => {
+        setCurrentUser(u);
+        return loadWAConfig(u);
+      }).catch(() => null),
       base44.entities.AppSettings.filter({ category: "calendar" })
         .then((settings) => {
           const settingMap = {};
@@ -104,8 +115,45 @@ export default function Settings() {
           setCalSettingIds(settingMap);
         })
         .catch(() => {})
-    ]).finally(() => setCheckingWa(false));
+    ]).finally(() => setWaLoading(false));
   }, []);
+
+  const handleWASave = async () => {
+    if (!waConfig) return;
+    setWaSaving(true);
+    setWaError("");
+    const res = await base44.functions.invoke("createOrUpdateWAConfig", {
+      phone_number_id: waPhoneNumberId.trim(),
+      access_token: waAccessToken.trim(),
+      waba_id: waWabaId.trim() || undefined,
+      display_name: waDisplayName.trim() || undefined,
+    });
+    if (res?.data?.success) {
+      const recheckRes = await base44.functions.invoke("verifyWhatsAppConnection", { user_id: currentUser?.id });
+      if (currentUser) await loadWAConfig(currentUser);
+      if (!recheckRes?.data?.success) {
+        setWaError("Saved, but connection check failed: " + (recheckRes?.data?.error || "Unknown error"));
+      }
+    } else {
+      setWaError(res?.data?.error || "Failed to save.");
+    }
+    setWaSaving(false);
+  };
+
+  const handleWARecheck = async () => {
+    setWaCheckingConn(true);
+    await base44.functions.invoke("verifyWhatsAppConnection", { user_id: currentUser?.id });
+    if (currentUser) await loadWAConfig(currentUser);
+    setWaCheckingConn(false);
+  };
+
+  const handleWADisconnect = async () => {
+    if (!waConfig || !window.confirm("Disconnect WhatsApp? You will be redirected to setup.")) return;
+    await base44.entities.UserWAConfig.update(waConfig.id, { is_active: false, connection_status: "pending" });
+    navigate("/setup");
+  };
+
+  const copyToClipboard = (text) => navigator.clipboard.writeText(text);
 
   // AI settings
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -163,174 +211,135 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleTestWhatsApp = async () => {
-    if (!waPhone.trim()) { setWaTestResult({ ok: false, msg: "Enter a phone number to send test message to." }); return; }
-    setTestingWa(true);
-    setWaTestResult(null);
-    const res = await base44.functions.invoke("whatsappWebhook", { _test: true, phone: waPhone });
-    if (res.data?.success) {
-      setWaTestResult({ ok: true, msg: "Test message sent successfully! Check your WhatsApp." });
-      setWaConnected(true);
-    } else {
-      setWaTestResult({ ok: false, msg: res.data?.error || "Failed to send test message. Check your credentials." });
-    }
-    setTestingWa(false);
-  };
-
-  const copyToClipboard = (text) => navigator.clipboard.writeText(text);
-
   const renderSection = () => {
     switch (activeSection) {
       case "whatsapp":
+        if (waLoading) {
+          return <div className="flex items-center justify-center py-12"><RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+        }
+        if (!waConfig) {
+          return (
+            <div className="text-center py-12">
+              <WifiOff className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium mb-4">WhatsApp not set up yet</p>
+              <Link to="/setup"><Button>Complete Setup →</Button></Link>
+            </div>
+          );
+        }
+        const isConnected = waConfig.connection_status === "connected";
+        const isError = waConfig.connection_status === "error";
         return (
           <div className="space-y-5">
-            {/* Real connection status banner */}
-            <div className={cn(
-              "flex items-center justify-between p-4 rounded-xl border-2",
-              checkingWa ? "bg-muted border-border" :
-              waConnected ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
-            )}>
-              <div className="flex items-center gap-3">
-                {checkingWa ? (
-                  <RefreshCw className="w-5 h-5 text-muted-foreground animate-spin" />
-                ) : waConnected ? (
+            {/* Connection status banner */}
+            {isConnected ? (
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 bg-emerald-50 border-emerald-200">
+                <div className="flex items-center gap-3">
                   <Wifi className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <WifiOff className="w-5 h-5 text-red-500" />
-                )}
-                <div>
-                  <p className={cn("text-sm font-semibold",
-                    checkingWa ? "text-muted-foreground" :
-                    waConnected ? "text-emerald-700" : "text-red-700"
-                  )}>
-                    {checkingWa ? "Checking connection..." :
-                     waConnected ? `WhatsApp Connected${waConnectionInfo?.verified_name ? ` · ${waConnectionInfo.verified_name}` : ""}` :
-                     "WhatsApp Not Connected"}
-                  </p>
-                  <p className={cn("text-xs mt-0.5",
-                    checkingWa ? "text-muted-foreground" :
-                    waConnected ? "text-emerald-600" : "text-red-500"
-                  )}>
-                    {checkingWa ? "Please wait..." :
-                     waConnected ? (waConnectionInfo?.display_phone_number || "API credentials verified") :
-                     (waConnectionInfo?.reason || "Check your API credentials below")}
-                  </p>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-700">WhatsApp Connected</p>
+                    {waConfig.last_verified_at && (
+                      <p className="text-xs text-emerald-600 mt-0.5">Last verified: {new Date(waConfig.last_verified_at).toLocaleString()}</p>
+                    )}
+                  </div>
                 </div>
+                <Button size="sm" variant="outline" className="text-xs h-7 gap-1.5" disabled={waCheckingConn} onClick={handleWARecheck}>
+                  <RefreshCw className={cn("w-3 h-3", waCheckingConn && "animate-spin")} /> Recheck
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-xs h-7 gap-1.5"
-                disabled={checkingWa}
-                onClick={() => {
-                  setCheckingWa(true);
-                  base44.functions.invoke("whatsappWebhook", { _checkConnection: true })
-                    .then(res => { setWaConnected(res.data?.connected === true); setWaConnectionInfo(res.data); })
-                    .catch(() => setWaConnected(false))
-                    .finally(() => setCheckingWa(false));
-                }}
-              >
-                <RefreshCw className={cn("w-3 h-3", checkingWa && "animate-spin")} /> Recheck
-              </Button>
-            </div>
+            ) : isError ? (
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 bg-red-50 border-red-200">
+                <div className="flex items-center gap-3">
+                  <WifiOff className="w-5 h-5 text-red-500" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-700">Connection Error</p>
+                    <p className="text-xs text-red-500 mt-0.5">{waConfig.error_message || "Unknown error"}</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="text-xs h-7 gap-1.5" disabled={waCheckingConn} onClick={handleWARecheck}>
+                  <RefreshCw className={cn("w-3 h-3", waCheckingConn && "animate-spin")} /> Recheck
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 bg-amber-50 border-amber-200">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <p className="text-sm font-semibold text-amber-700">Setup incomplete</p>
+                </div>
+                <Link to="/setup"><Button size="sm" className="text-xs h-7">Complete Setup</Button></Link>
+              </div>
+            )}
 
-            {/* Step guide */}
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="p-4">
-                <p className="text-sm font-semibold text-primary mb-2">Setup Checklist</p>
-                <ol className="space-y-1.5 text-xs text-muted-foreground list-decimal list-inside">
-                  <li>Go to <span className="font-medium text-foreground">Meta Developer Console → WhatsApp → Configuration</span></li>
-                  <li>Paste the Webhook URL below into <span className="font-medium text-foreground">Callback URL</span></li>
-                  <li>Paste your Verify Token into <span className="font-medium text-foreground">Verify Token</span> and click Verify & Save</li>
-                  <li>Subscribe to <span className="font-medium text-foreground">messages</span> webhook field</li>
-                  <li>Your secrets (Access Token, Phone Number ID) are already saved ✓</li>
-                </ol>
-              </CardContent>
-            </Card>
-
-            {/* Webhook URL */}
+            {/* Webhook Configuration — read-only, from DB */}
             <Card className="border-border/60">
               <CardHeader className="pb-2"><CardTitle className="text-sm">Webhook Configuration</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Callback URL <span className="text-primary">(paste this in Meta)</span></label>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <input
-                      readOnly
-                      value={WEBHOOK_URL}
-                      className="flex-1 px-3 py-2 text-xs bg-muted rounded-lg border-0 outline-none font-mono"
-                    />
-                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(WEBHOOK_URL)}>
+                    <input readOnly value={waConfig.webhook_url || ""} className="flex-1 px-3 py-2 text-xs bg-muted rounded-lg border-0 outline-none font-mono" />
+                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(waConfig.webhook_url || "")}>
                       <Copy className="w-3.5 h-3.5" /> Copy
                     </Button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Verify Token <span className="text-primary">(copy this exactly into Meta's "Verify Token" field)</span>
-                  </label>
+                  <label className="text-xs font-medium text-muted-foreground">Verify Token <span className="text-primary">(paste exactly into Meta's Verify Token field)</span></label>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <input
-                      readOnly
-                      value={waVerifyToken}
-                      className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none font-mono select-all"
-                    />
-                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(waVerifyToken)}>
+                    <input readOnly value={waConfig.verify_token || ""} className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none font-mono select-all" />
+                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-9" onClick={() => copyToClipboard(waConfig.verify_token || "")}>
                       <Copy className="w-3.5 h-3.5" /> Copy
                     </Button>
                   </div>
-                  <p className="text-xs text-amber-600 mt-1.5 font-medium">⚠ Paste this value exactly (no spaces) into Meta's Verify Token field</p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* API credentials info */}
+            {/* API Credentials — editable */}
             <Card className="border-border/60">
               <CardHeader className="pb-2"><CardTitle className="text-sm">API Credentials</CardTitle></CardHeader>
-              <CardContent className="space-y-1">
-                {[
-                  { label: "Access Token", desc: "WHATSAPP_ACCESS_TOKEN secret" },
-                  { label: "Phone Number ID", desc: "WHATSAPP_PHONE_NUMBER_ID secret" },
-                  { label: "Verify Token", desc: "WHATSAPP_VERIFY_TOKEN secret" },
-                ].map(({ label, desc }, i, arr) => (
-                  <div key={label} className={cn("flex items-center justify-between py-2.5", i < arr.length - 1 && "border-b border-border/40")}>
-                    <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
-                    {waConnected ? (
-                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">✓ Set</Badge>
-                    ) : waConnected === false ? (
-                      <Badge className="bg-red-50 text-red-600 border-red-200 text-xs">⚠ Check</Badge>
-                    ) : (
-                      <Badge className="bg-muted text-muted-foreground text-xs">...</Badge>
-                    )}
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Phone Number ID</label>
+                  <input value={waPhoneNumberId} onChange={e => setWaPhoneNumberId(e.target.value)} className="w-full mt-1.5 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Access Token</label>
+                  <div className="relative mt-1.5">
+                    <input type={showToken ? "text" : "password"} value={waAccessToken} onChange={e => setWaAccessToken(e.target.value)} className="w-full px-3 py-2 pr-10 text-sm bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary/20" />
+                    <button onClick={() => setShowToken(!showToken)} className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground">
+                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
-                ))}
-                <div className="pt-2">
-                  <p className="text-xs text-muted-foreground">To update any secret, go to <span className="font-medium text-foreground">Dashboard → Settings → Environment Variables</span></p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">WABA ID</label>
+                  <input value={waWabaId} onChange={e => setWaWabaId(e.target.value)} className="w-full mt-1.5 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Display Name</label>
+                  <input value={waDisplayName} onChange={e => setWaDisplayName(e.target.value)} className="w-full mt-1.5 px-3 py-2 text-sm bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+                {waError && <p className="text-xs text-red-500">{waError}</p>}
+                <Button onClick={handleWASave} disabled={waSaving} size="sm" className="gap-2 w-full">
+                  {waSaving ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving & Verifying...</> : <><Save className="w-3.5 h-3.5" />Save Changes</>}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-red-200">
+              <CardHeader className="pb-2"><CardTitle className="text-sm text-red-600">Danger Zone</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Disconnect WhatsApp</p>
+                    <p className="text-xs text-muted-foreground">You will be redirected to the setup wizard.</p>
+                  </div>
+                  <Button variant="destructive" size="sm" onClick={handleWADisconnect}>Disconnect</Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Test */}
-            <Card className="border-border/60">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Test Connection</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <InputRow label="Send a test message to phone number (with country code)" value={waPhone} onChange={setWaPhone} placeholder="+923001234567" />
-                <Button onClick={handleTestWhatsApp} disabled={testingWa} size="sm" className="gap-2 w-full">
-                  {testingWa ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Smartphone className="w-3.5 h-3.5" />}
-                  {testingWa ? "Sending..." : "Send Test Message via WhatsApp"}
-                </Button>
-                {waTestResult && (
-                  <div className={cn("text-xs px-3 py-2 rounded-lg", waTestResult.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
-                    {waTestResult.msg}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Meta console link */}
             <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer">
               <Button variant="outline" size="sm" className="gap-2 w-full">
                 <ExternalLink className="w-3.5 h-3.5" /> Open Meta Developer Console
@@ -627,10 +636,12 @@ export default function Settings() {
               <h2 className="text-lg font-bold capitalize">
                 {SECTIONS.find(s => s.key === activeSection)?.label} Settings
               </h2>
-              <Button onClick={handleSave} size="sm" className={cn("gap-2", saved && "bg-emerald-500 hover:bg-emerald-600")}>
-                <Save className="w-3.5 h-3.5" />
-                {saved ? "Saved!" : "Save Changes"}
-              </Button>
+              {activeSection !== "whatsapp" && (
+                <Button onClick={handleSave} size="sm" className={cn("gap-2", saved && "bg-emerald-500 hover:bg-emerald-600")}>
+                  <Save className="w-3.5 h-3.5" />
+                  {saved ? "Saved!" : "Save Changes"}
+                </Button>
+              )}
             </div>
             {renderSection()}
           </div>

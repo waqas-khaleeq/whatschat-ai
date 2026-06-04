@@ -17,9 +17,12 @@ Deno.serve(async (req) => {
 
     const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id: userId, is_active: true });
     if (!configs.length) {
-      return Response.json({ success: false, error: "No config found" });
+      return Response.json({ success: false, error: "No config found. Please complete setup first." });
     }
     const userConfig = configs[0];
+
+    // Compute the webhook URL from the request origin
+    const webhookUrl = new URL(req.url).origin + "/functions/whatsappWebhook";
 
     const metaRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}`, {
       headers: { "Authorization": `Bearer ${userConfig.access_token}` },
@@ -31,16 +34,19 @@ Deno.serve(async (req) => {
         connection_status: "connected",
         last_verified_at: new Date().toISOString(),
         error_message: null,
+        webhook_url: webhookUrl,
         display_name: responseData.display_phone_number || responseData.verified_name || userConfig.display_name,
       });
       return Response.json({
         success: true,
         display_name: responseData.display_phone_number || responseData.verified_name,
+        webhook_url: webhookUrl,
       });
     } else if (metaRes.status === 401) {
       await base44.asServiceRole.entities.UserWAConfig.update(userConfig.id, {
         connection_status: "error",
-        error_message: "Token expired or invalid",
+        error_message: "Access token is invalid or expired",
+        webhook_url: webhookUrl,
       });
       return Response.json({ success: false, error: "Access token is invalid or expired." });
     } else {
@@ -48,6 +54,7 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.UserWAConfig.update(userConfig.id, {
         connection_status: "error",
         error_message: errMsg,
+        webhook_url: webhookUrl,
       });
       return Response.json({ success: false, error: errMsg });
     }

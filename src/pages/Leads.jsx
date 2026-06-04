@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import { Search, Filter, Download, Plus, ArrowRight, Bot, User, Calendar, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,15 +27,21 @@ export default function Leads() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [currentUser, setCurrentUser] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    base44.auth.me().then(async u => {
       setCurrentUser(u);
+      const configs = await base44.entities.UserWAConfig.filter({ user_id: u.id, is_active: true });
+      if (!configs.length || configs[0].connection_status !== "connected") {
+        navigate("/setup");
+        return [];
+      }
       return base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 200);
     })
-      .then(setLeads)
+      .then(data => { if (data) setLeads(data); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [navigate]);
 
   const filtered = leads.filter((l) => {
     const matchSearch =

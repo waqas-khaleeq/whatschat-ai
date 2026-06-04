@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { MessageSquare, Users, Calendar, Bot, TrendingUp, Clock, CheckCircle, AlertCircle, ArrowRight, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,14 +34,20 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }) => (
 export default function Dashboard() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(u =>
-      base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 20)
-    )
-      .then(setConversations)
+    base44.auth.me().then(async u => {
+      const configs = await base44.entities.UserWAConfig.filter({ user_id: u.id, is_active: true });
+      if (!configs.length || configs[0].connection_status !== "connected") {
+        navigate("/setup");
+        return [];
+      }
+      return base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 20);
+    })
+      .then(data => { if (data) setConversations(data); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [navigate]);
 
   const stats = {
     total: conversations.length,
