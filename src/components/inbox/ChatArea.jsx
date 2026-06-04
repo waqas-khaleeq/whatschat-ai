@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import {
   Send, Bot, MoreVertical,
   StickyNote, Zap, X, Paperclip, Mic, Square,
-  Info, ChevronDown
+  Info, ChevronDown, ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
@@ -44,7 +44,7 @@ function groupMessagesByDate(messages) {
   return groups;
 }
 
-export default function ChatArea({ conversation, onHandoverChange, onShowDetails, currentUser }) {
+export default function ChatArea({ conversation, onHandoverChange, onShowDetails, currentUser, onBack }) {
   const [messages, setMessages] = useState([]);
   const [liveConv, setLiveConv] = useState(conversation);
   const [input, setInput] = useState("");
@@ -273,8 +273,17 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-[#f0f2f5] border-b border-[#e9edef] shrink-0 gap-2">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center justify-between px-3 md:px-4 py-2.5 bg-[#f0f2f5] border-b border-[#e9edef] shrink-0 gap-2" style={{ minHeight: 64 }}>
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          {/* Mobile back button */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="md:hidden w-11 h-11 rounded-full flex items-center justify-center hover:bg-[#e9edef] transition-colors shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 text-[#54656f]" />
+            </button>
+          )}
           <div className="relative shrink-0">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#128c7e] to-[#25d366] flex items-center justify-center shadow-sm">
               <span className="text-sm font-bold text-white">{initials}</span>
@@ -311,14 +320,14 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       {/* Mode status banner */}
       {!aiMode && (
         <div className={cn(
-          "flex items-center justify-center gap-2 py-1.5 text-xs font-medium border-b",
+          "flex items-center justify-center gap-2 py-1.5 text-xs font-medium border-b px-3",
           liveConv?.ai_paused
             ? "bg-amber-50 text-amber-700 border-amber-100"
             : "bg-blue-50 text-blue-700 border-blue-100"
         )}>
           {liveConv?.ai_paused
-            ? "⏸ AI is paused — messages received but AI is not auto-replying"
-            : "👤 Human agent mode — you are handling this conversation"}
+            ? "AI is paused — you are in manual mode"
+            : "Human agent mode — you are handling this conversation"}
         </div>
       )}
 
