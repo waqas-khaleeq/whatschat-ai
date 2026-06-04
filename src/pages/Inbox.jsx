@@ -5,10 +5,8 @@ import AppLayout from "@/components/layout/AppLayout";
 import ConversationList from "@/components/inbox/ConversationList";
 import ChatArea from "@/components/inbox/ChatArea";
 import LeadPanel from "@/components/inbox/LeadPanel";
-import NewChatModal from "@/components/inbox/NewChatModal";
+import NewChatModal from "@/components/inbox/NewChatModal.jsx";
 import WaBanner from "@/components/inbox/WaBanner.jsx";
-
-const POLL_INTERVAL = 5000;
 
 export default function Inbox() {
   const [conversations, setConversations] = useState([]);
@@ -20,7 +18,7 @@ export default function Inbox() {
   const [waConfig, setWaConfig] = useState(null);
   const [activeView, setActiveView] = useState("list"); // "list" | "chat"
   const navigate = useNavigate();
-  const pollRef = useRef(null);
+  const convUnsubRef = useRef(null);
 
   useEffect(() => {
     base44.auth.me().then(u => setCurrentUser(u)).catch(() => {});
@@ -30,36 +28,55 @@ export default function Inbox() {
     if (!currentUser) return;
 
     base44.entities.UserWAConfig.filter({ user_id: currentUser.id, is_active: true })
-      .then(configs => {
+      .then(async configs => {
         if (!configs.length) { navigate("/setup"); return; }
         setWaConfig(configs[0]);
 
         const params = new URLSearchParams(window.location.search);
-        const id = params.get("id");
+        const urlId = params.get("id");
 
-        const load = () =>
-          base44.entities.Conversation.filter({ owner_user_id: currentUser.id }, "-last_message_time", 100)
-            .then(data => {
-              setConversations(prev => {
-                // Merge: preserve order for existing, prepend new
-                const prevIds = new Set(prev.map(c => c.id));
-                const newOnes = data.filter(c => !prevIds.has(c.id));
-                const updated = prev.map(c => data.find(d => d.id === c.id) || c);
-                return [...newOnes, ...updated].sort((a, b) =>
-                  new Date(b.last_message_time || b.created_date) - new Date(a.last_message_time || a.created_date)
-                );
-              });
-              if (id) {
-                const found = data.find(c => c.id === id);
-                if (found) { setSelected(found); setActiveView("chat"); }
-              }
+        // Initial load
+        const data = await base44.entities.Conversation.filter(
+          { owner_user_id: currentUser.id }, "-last_message_time", 100
+        );
+        const sorted = [...data].sort((a, b) =>
+          new Date(b.last_message_time || b.created_date) - new Date(a.last_message_time || a.created_date)
+        );
+        setConversations(sorted);
+        setLoading(false);
+
+        if (urlId) {
+          const found = data.find(c => c.id === urlId);
+          if (found) { setSelected(found); setActiveView("chat"); }
+        }
+
+        // Real-time subscription — replaces polling
+        convUnsubRef.current = base44.entities.Conversation.subscribe((event) => {
+          if (event.data?.owner_user_id !== currentUser.id) return;
+          if (event.type === "create") {
+            setConversations(prev => {
+              if (prev.some(c => c.id === event.data.id)) return prev;
+              return [event.data, ...prev];
             });
-
-        load().finally(() => setLoading(false));
-        pollRef.current = setInterval(load, POLL_INTERVAL);
+          } else if (event.type === "update") {
+            setConversations(prev =>
+              prev.map(c => c.id === event.data.id ? event.data : c)
+                .sort((a, b) =>
+                  new Date(b.last_message_time || b.created_date) - new Date(a.last_message_time || a.created_date)
+                )
+            );
+            // Keep selected in sync
+            setSelected(prev => prev?.id === event.data.id ? event.data : prev);
+          } else if (event.type === "delete") {
+            setConversations(prev => prev.filter(c => c.id !== event.data.id));
+            setSelected(prev => prev?.id === event.data.id ? null : prev);
+          }
+        });
       });
 
-    return () => clearInterval(pollRef.current);
+    return () => {
+      if (convUnsubRef.current) convUnsubRef.current();
+    };
   }, [currentUser, navigate]);
 
   const handleSelect = (conv) => {

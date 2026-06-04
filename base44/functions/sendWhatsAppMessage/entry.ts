@@ -99,9 +99,10 @@ Deno.serve(async (req) => {
     } else if (message) {
       msgPayload = {
         messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: toPhone,
         type: "text",
-        text: { body: message },
+        text: { preview_url: false, body: message },
       };
     } else {
       return Response.json({ success: false, error: "message or media_url required", whatsapp_message_id: null, error_code: "MISSING_CONTENT" });
@@ -177,7 +178,8 @@ Deno.serve(async (req) => {
       }
 
       lastError = sendData.error?.message || "Failed to send message";
-      console.error(`Attempt ${attempt + 1} failed:`, lastError);
+      const errCode = sendData.error?.code;
+      console.error(`Attempt ${attempt + 1} failed [${sendRes.status}] code=${errCode}:`, lastError, JSON.stringify(sendData));
     }
 
     // All retries exhausted
