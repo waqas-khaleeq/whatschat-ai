@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     const userConfig = configs[0];
 
     // Fixed public webhook URL — same for all users
-    const webhookUrl = "https://whatchat-ai.base44.app/functions/whatsappWebhook";
+    const webhookUrl = "https://whatschat-ai.base44.app/functions/whatsappWebhook";
 
     const metaRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}`, {
       headers: { "Authorization": `Bearer ${userConfig.access_token}` },
