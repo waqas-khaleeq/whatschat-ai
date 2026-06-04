@@ -308,7 +308,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
 
   const handleReopen = async () => {
     setShowMenu(false);
-    await base44.entities.Conversation.update(liveConv.id, { status: "open" });
+    await base44.entities.Conversation.update(liveConv.id, { status: "contacted" });
     await base44.entities.Message.create({
       conversation_id: liveConv.id,
       sender: "system",
@@ -317,7 +317,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       timestamp: new Date().toISOString(),
       status: "sent",
     });
-    const updated = { ...liveConv, status: "open" };
+    const updated = { ...liveConv, status: "contacted" };
     setLiveConv(updated);
     onConversationUpdate?.(updated);
   };

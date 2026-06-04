@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import AppLayout from "@/components/layout/AppLayout";
-import { Plus, Search, BookOpen, FileText, Globe, HelpCircle, DollarSign, Building2, Trash2, Edit3, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { Plus, Search, BookOpen, FileText, HelpCircle, DollarSign, Building2, Trash2, Edit3, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,14 +27,14 @@ const categoryColors = {
   custom_instructions: "bg-pink-50 text-pink-700 border-pink-200",
 };
 
-function AddItemModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ category: "faqs", content_type: "text", title: "", content: "", faq_question: "", faq_answer: "", is_active: true });
+function AddItemModal({ onClose, onSave, initialData }) {
+  const [form, setForm] = useState(initialData || { category: "faqs", content_type: "text", title: "", content: "", faq_question: "", faq_answer: "", is_active: true });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-lg max-h-[80vh] overflow-y-auto">
         <CardHeader className="border-b">
-          <CardTitle className="text-base">Add Knowledge Item</CardTitle>
+          <CardTitle className="text-base">{initialData ? "Edit Knowledge Item" : "Add Knowledge Item"}</CardTitle>
         </CardHeader>
         <CardContent className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -132,7 +132,7 @@ function AddItemModal({ onClose, onSave }) {
           </div>
         </CardContent>
         <div className="flex gap-3 px-5 py-4 border-t">
-          <Button onClick={() => onSave(form)} className="flex-1">Save to Knowledge Base</Button>
+          <Button onClick={() => onSave(form)} className="flex-1">{initialData ? "Update Item" : "Save to Knowledge Base"}</Button>
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
         </div>
       </Card>
@@ -146,6 +146,7 @@ export default function KnowledgeBase() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => {
     base44.entities.KnowledgeBase.list("-last_updated", 200)
@@ -163,11 +164,14 @@ export default function KnowledgeBase() {
   });
 
   const handleSave = async (form) => {
-    const created = await base44.entities.KnowledgeBase.create({
-      ...form,
-      last_updated: new Date().toISOString(),
-    });
-    setItems((prev) => [created, ...prev]);
+    if (editingItem) {
+      await base44.entities.KnowledgeBase.update(editingItem.id, { ...form, last_updated: new Date().toISOString() });
+      setItems((prev) => prev.map((i) => i.id === editingItem.id ? { ...i, ...form } : i));
+      setEditingItem(null);
+    } else {
+      const created = await base44.entities.KnowledgeBase.create({ ...form, last_updated: new Date().toISOString() });
+      setItems((prev) => [created, ...prev]);
+    }
     setShowAdd(false);
   };
 
@@ -298,6 +302,13 @@ export default function KnowledgeBase() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button
+                        onClick={() => { setEditingItem(item); setShowAdd(true); }}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                        title="Edit"
+                      >
+                        <Edit3 className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button
                         onClick={() => toggleActive(item)}
                         className="p-1.5 rounded-lg hover:bg-muted transition-colors"
                         title={item.is_active ? "Disable" : "Enable"}
@@ -318,7 +329,13 @@ export default function KnowledgeBase() {
           )}
         </div>
       </div>
-      {showAdd && <AddItemModal onClose={() => setShowAdd(false)} onSave={handleSave} />}
+      {showAdd && (
+        <AddItemModal
+          onClose={() => { setShowAdd(false); setEditingItem(null); }}
+          onSave={handleSave}
+          initialData={editingItem}
+        />
+      )}
     </AppLayout>
   );
 }

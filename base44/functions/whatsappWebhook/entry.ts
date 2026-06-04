@@ -166,15 +166,26 @@ Deno.serve(async (req) => {
         });
 
         // ── AI auto-reply guard ───────────────────────────────────────────────
-        const freshConvs = await base44.asServiceRole.entities.Conversation.filter({
-          customer_phone: phone,
-          owner_user_id: ownerUserId,
-        });
+        const [freshConvs, aiSettings] = await Promise.all([
+          base44.asServiceRole.entities.Conversation.filter({
+            customer_phone: phone,
+            owner_user_id: ownerUserId,
+          }),
+          base44.asServiceRole.entities.AppSettings.filter({ category: "ai_agent" }),
+        ]);
         const freshConv = freshConvs[0];
+
+        const settingsMap = {};
+        aiSettings.forEach(s => { settingsMap[s.key] = s.value; });
+        const aiGloballyEnabled = settingsMap["ai_enabled"] !== "false";
+        const aiGlobalMode = settingsMap["ai_mode"] || "auto";
+        // Only send automatically in "auto" mode; in approval/draft/human modes, skip auto-send
+        const autoSendEnabled = aiGloballyEnabled && aiGlobalMode === "auto";
 
         const aiShouldReply =
           messageType === "text" &&
           content.trim() &&
+          autoSendEnabled &&
           freshConv?.handling_mode === "ai" &&
           freshConv?.ai_paused !== true &&
           freshConv?.status !== "closed";
@@ -186,10 +197,9 @@ Deno.serve(async (req) => {
 
         console.log(`AI replying to conversation ${freshConv.id}`);
         try {
-          const [prevMessages, kbEntries, promptSettings] = await Promise.all([
+          const [prevMessages, kbEntries] = await Promise.all([
             base44.asServiceRole.entities.Message.filter({ conversation_id: freshConv.id }, "timestamp", 20),
             base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
-            base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
           ]);
 
           const historyText = prevMessages
@@ -204,7 +214,7 @@ Deno.serve(async (req) => {
             return kb.content ? `[${kb.category}] ${kb.title}:\n${kb.content}` : `[${kb.category}] ${kb.title}`;
           }).join("\n\n");
 
-          const systemPrompt = promptSettings?.[0]?.value ||
+          const systemPrompt = settingsMap["ai_system_prompt"] ||
             "You are a helpful business assistant on WhatsApp. Be concise, friendly, and professional. Keep responses short (1-3 sentences).";
 
           const aiReply = await base44.asServiceRole.integrations.Core.InvokeLLM({

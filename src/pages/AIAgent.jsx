@@ -65,12 +65,24 @@ export default function AIAgent() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [settingIds, setSettingIds] = useState({});
+
   useEffect(() => {
-    base44.entities.AppSettings.filter({ key: "ai_system_prompt" }).then((results) => {
-      if (results && results.length > 0) {
-        setSystemPrompt(results[0].value);
-        setPromptSettingId(results[0].id);
-      }
+    base44.entities.AppSettings.filter({ category: "ai_agent" }).then((results) => {
+      const ids = {};
+      results.forEach(s => {
+        ids[s.key] = s.id;
+        if (s.key === "ai_system_prompt") { setSystemPrompt(s.value); setPromptSettingId(s.id); }
+        if (s.key === "ai_mode") setActiveMode(s.value);
+        if (s.key === "ai_tone") setActiveTone(s.value);
+        if (s.key === "ai_confidence") setConfidence(Number(s.value));
+        if (s.key === "ai_enabled") setIsEnabled(s.value === "true");
+        if (s.key === "ai_fallback") setFallbackMessage(s.value);
+        if (s.key === "ai_handover_triggers") {
+          try { setHandoverTriggers(JSON.parse(s.value)); } catch {}
+        }
+      });
+      setSettingIds(ids);
       setLoading(false);
     });
   }, []);
@@ -92,20 +104,31 @@ export default function AIAgent() {
     setTesting(false);
   };
 
-  const handleSave = async () => {
-    // Save system prompt to AppSettings
-    if (promptSettingId) {
-      await base44.entities.AppSettings.update(promptSettingId, { value: systemPrompt });
+  const upsertSetting = async (key, value, label, ids, newIds) => {
+    if (ids[key]) {
+      await base44.entities.AppSettings.update(ids[key], { value: String(value) });
     } else {
       const created = await base44.entities.AppSettings.create({
-        key: "ai_system_prompt",
-        value: systemPrompt,
-        category: "ai_agent",
-        label: "AI System Prompt",
-        description: "The system prompt given to the AI agent for every conversation",
+        key, value: String(value), category: "ai_agent", label,
       });
-      setPromptSettingId(created.id);
+      newIds[key] = created.id;
     }
+  };
+
+  const handleSave = async () => {
+    const newIds = {};
+    const ids = { ...settingIds };
+    await Promise.all([
+      upsertSetting("ai_system_prompt", systemPrompt, "AI System Prompt", ids, newIds),
+      upsertSetting("ai_mode", activeMode, "AI Reply Mode", ids, newIds),
+      upsertSetting("ai_tone", activeTone, "AI Tone", ids, newIds),
+      upsertSetting("ai_confidence", confidence, "AI Confidence Threshold", ids, newIds),
+      upsertSetting("ai_enabled", isEnabled, "AI Enabled", ids, newIds),
+      upsertSetting("ai_fallback", fallbackMessage, "AI Fallback Message", ids, newIds),
+      upsertSetting("ai_handover_triggers", JSON.stringify(handoverTriggers), "AI Handover Triggers", ids, newIds),
+    ]);
+    if (Object.keys(newIds).length) setSettingIds(prev => ({ ...prev, ...newIds }));
+    if (newIds["ai_system_prompt"]) setPromptSettingId(newIds["ai_system_prompt"]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

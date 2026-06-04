@@ -288,15 +288,30 @@ export default function LeadPanel({ conversation, onUpdate, onClose }) {
         {/* Actions */}
         <Section title="Actions" icon={Zap} defaultOpen={false}>
           <div className="space-y-2">
-            <Button variant="outline" size="sm" className="w-full h-8 text-xs justify-start gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs justify-start gap-2"
+              onClick={() => handleStatusChange("appointment_booked")}
+            >
               <Calendar className="w-3.5 h-3.5 text-violet-500" />
-              Book Appointment
+              Mark Appointment Booked
             </Button>
-            <Button variant="outline" size="sm" className="w-full h-8 text-xs justify-start gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs justify-start gap-2"
+              onClick={() => handleStatusChange("qualified")}
+            >
               <CheckCircle className="w-3.5 h-3.5 text-green-500" />
               Mark as Qualified
             </Button>
-            <Button variant="outline" size="sm" className="w-full h-8 text-xs justify-start gap-2 text-destructive border-destructive/30 hover:bg-destructive/5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs justify-start gap-2 text-destructive border-destructive/30 hover:bg-destructive/5"
+              onClick={() => handleStatusChange("lost")}
+            >
               <XCircle className="w-3.5 h-3.5" />
               Mark as Lost
             </Button>

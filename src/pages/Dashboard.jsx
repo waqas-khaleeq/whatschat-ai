@@ -34,6 +34,7 @@ const StatCard = ({ icon: Icon, label, value, sub, color, trend }) => (
 export default function Dashboard() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [waConnected, setWaConnected] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function Dashboard() {
         navigate("/setup");
         return [];
       }
+      setWaConnected(true);
       return base44.entities.Conversation.filter({ owner_user_id: u.id }, "-last_message_time", 20);
     })
       .then(data => { if (data) setConversations(data); })
@@ -70,10 +72,12 @@ export default function Dashboard() {
             <p className="text-muted-foreground text-sm mt-0.5">Welcome back — here's what's happening today</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-medium border border-emerald-200">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              WhatsApp Connected
-            </div>
+            {waConnected && (
+              <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-medium border border-emerald-200">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                WhatsApp Connected
+              </div>
+            )}
           </div>
         </div>
 
