@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { RefreshCw, Plus, Trash2, Eye, CheckCircle, Clock, AlertCircle, Pause, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import CreateTemplateModal from './CreateTemplateModal';
 
 export default function TemplatesTab({ currentUser }) {
   const [templates, setTemplates] = useState([]);
@@ -10,6 +11,7 @@ export default function TemplatesTab({ currentUser }) {
   const [lastSynced, setLastSynced] = useState(null);
   const [filter, setFilter] = useState('all');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [stats, setStats] = useState({ approved: 0, pending: 0, rejected: 0, paused: 0 });
 
   useEffect(() => {
@@ -125,20 +127,20 @@ export default function TemplatesTab({ currentUser }) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Message Templates</h3>
         <div className="flex gap-2">
-          <Button
-            onClick={handleSync}
-            disabled={syncing}
-            variant="outline"
-            className="gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync from Meta'}
-          </Button>
-          <Button className="gap-2">
-            <Plus className="w-4 h-4" />
-            Create Template
-          </Button>
-        </div>
+            <Button
+              onClick={handleSync}
+              disabled={syncing}
+              variant="outline"
+              className="gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync from Meta'}
+            </Button>
+            <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Create Template
+            </Button>
+          </div>
       </div>
 
       {/* Status Bar */}
@@ -339,7 +341,15 @@ export default function TemplatesTab({ currentUser }) {
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
+        )}
+
+        {/* Create Template Modal */}
+        <CreateTemplateModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        currentUser={currentUser}
+        onSuccess={fetchTemplates}
+        />
+        </div>
+        );
+        }
