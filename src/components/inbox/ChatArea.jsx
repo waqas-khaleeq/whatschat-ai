@@ -145,12 +145,19 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   const sendMedia = async () => {
     if (!mediaPreview || !conversation) return;
     setSending(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: mediaPreview.file });
+
+    // Convert file to base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(mediaPreview.file);
+    });
 
     const res = await base44.functions.invoke("sendWhatsAppMessage", {
       user_id: currentUser?.id,
       phone: conversation.customer_phone,
-      media_url: file_url,
+      media_base64: base64,
       media_type: mediaPreview.type,
       media_name: mediaPreview.name,
       caption: input.trim() || undefined,
@@ -163,12 +170,15 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       return;
     }
 
+    // Store with wa-media-id so it can be proxied back for display
+    const storedMediaUrl = res.data.media_id ? `wa-media-id:${res.data.media_id}` : base64;
+
     await base44.entities.Message.create({
       conversation_id: conversation.id,
       sender: "agent",
       message_type: mediaPreview.type,
       content: input.trim() || mediaPreview.name,
-      media_url: file_url,
+      media_url: storedMediaUrl,
       media_name: mediaPreview.name,
       timestamp: new Date().toISOString(),
       status: "sent",

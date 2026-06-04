@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
 
     const body = await req.json();
-    const { user_id, phone, message, media_url, media_type, media_name, caption, conversation_id } = body;
+    const { user_id, phone, message, media_url, media_base64, media_type, media_name, caption, conversation_id } = body;
 
     if (!phone) {
       return Response.json({ success: false, error: "phone is required", whatsapp_message_id: null, error_code: "MISSING_PHONE" });
@@ -56,19 +56,46 @@ Deno.serve(async (req) => {
       }
     }
 
+    // If base64 media provided, upload to Meta first to get a media_id
+    let resolvedMediaId = null;
+    if (media_base64 && media_type) {
+      // Decode base64 to bytes
+      const base64Data = media_base64.includes(",") ? media_base64.split(",")[1] : media_base64;
+      const mimeType = media_base64.includes(",") ? media_base64.split(";")[0].replace("data:", "") : "application/octet-stream";
+      const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+      const formData = new FormData();
+      formData.append("messaging_product", "whatsapp");
+      formData.append("file", new Blob([bytes], { type: mimeType }), media_name || "upload");
+
+      const uploadRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}/media`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userConfig.access_token}` },
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.id) {
+        console.error("Media upload failed:", JSON.stringify(uploadData));
+        return Response.json({ success: false, error: "Media upload to WhatsApp failed", whatsapp_message_id: null, error_code: "MEDIA_UPLOAD_FAILED" });
+      }
+      resolvedMediaId = uploadData.id;
+    }
+
     let msgPayload;
-    if (media_url && media_type) {
+    if (resolvedMediaId) {
+      const typeMap = { image: "image", video: "video", document: "document", audio: "audio" };
+      const waType = typeMap[media_type] || "document";
+      const mediaObj = { id: resolvedMediaId };
+      if (media_type === "document" && media_name) mediaObj.filename = media_name;
+      if (caption) mediaObj.caption = caption;
+      msgPayload = { messaging_product: "whatsapp", to: toPhone, type: waType, [waType]: mediaObj };
+    } else if (media_url && media_type) {
       const typeMap = { image: "image", video: "video", document: "document", audio: "audio" };
       const waType = typeMap[media_type] || "document";
       const mediaObj = { link: media_url };
       if (media_type === "document" && media_name) mediaObj.filename = media_name;
       if (caption) mediaObj.caption = caption;
-      msgPayload = {
-        messaging_product: "whatsapp",
-        to: toPhone,
-        type: waType,
-        [waType]: mediaObj,
-      };
+      msgPayload = { messaging_product: "whatsapp", to: toPhone, type: waType, [waType]: mediaObj };
     } else if (message) {
       msgPayload = {
         messaging_product: "whatsapp",
@@ -107,7 +134,7 @@ Deno.serve(async (req) => {
       if (sendRes.ok) {
         const waMessageId = sendData.messages?.[0]?.id || null;
         console.log("WhatsApp API response:", JSON.stringify(sendData));
-        return Response.json({ success: true, whatsapp_message_id: waMessageId, error: null, error_code: null });
+        return Response.json({ success: true, whatsapp_message_id: waMessageId, media_id: resolvedMediaId, error: null, error_code: null });
       }
 
       // Token expired — stop immediately

@@ -3,105 +3,107 @@ import { Play, Pause, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BAR_COUNT = 20;
+const BAR_HEIGHTS = [8, 14, 10, 16, 8, 12, 18, 10, 14, 8, 16, 10, 14, 18, 8, 12, 16, 10, 14, 8];
 
-function formatTime(secs) {
-  if (isNaN(secs) || !isFinite(secs)) return "0:00";
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+function formatTime(s) {
+  if (!s || isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${m}:${sec}`;
 }
 
 export default function AudioPlayer({ src, isSent }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [bars, setBars] = useState(() => Array.from({ length: BAR_COUNT }, () => 0.4));
-  const animRef = useRef(null);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTime = () => setCurrentTime(audio.currentTime);
+    const onTime = () => setCurrent(audio.currentTime);
     const onMeta = () => setDuration(audio.duration);
-    const onEnded = () => { setPlaying(false); setCurrentTime(0); };
+    const onEnd = () => setPlaying(false);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
-    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("ended", onEnd);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onMeta);
-      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("ended", onEnd);
     };
   }, []);
 
-  useEffect(() => {
-    if (playing) {
-      animRef.current = setInterval(() => {
-        setBars(Array.from({ length: BAR_COUNT }, () => 0.2 + Math.random() * 0.8));
-      }, 150);
-    } else {
-      clearInterval(animRef.current);
-      setBars(Array.from({ length: BAR_COUNT }, () => 0.4));
-    }
-    return () => clearInterval(animRef.current);
-  }, [playing]);
-
-  const togglePlay = () => {
+  const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) { audio.pause(); setPlaying(false); }
     else { audio.play(); setPlaying(true); }
   };
 
-  const accent = isSent ? "#128c7e" : "#128c7e";
+  const progress = duration > 0 ? current / duration : 0;
+  const activeBars = Math.round(progress * BAR_COUNT);
+
+  const bubbleBg = isSent ? "#dcf8c6" : "#f0f0f0";
+  const activeColor = isSent ? "#128c7e" : "#128c7e";
+  const inactiveColor = isSent ? "#a8d5a2" : "#c0c0c0";
 
   return (
-    <div className={cn(
-      "flex items-center gap-2 rounded-3xl px-3 py-2",
-      "min-w-[200px] max-w-[280px]",
-      isSent ? "bg-white/20" : "bg-[#128c7e]/10"
-    )}>
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        borderRadius: 24, padding: "8px 12px",
+        minWidth: 200, maxWidth: 280,
+        background: bubbleBg,
+      }}
+    >
+      <audio ref={audioRef} src={src} preload="metadata" style={{ display: "none" }} />
 
-      {/* Mic icon */}
-      <div className="w-6 h-6 flex items-center justify-center shrink-0 text-[#128c7e]">
-        <Mic className="w-5 h-5" />
-      </div>
+      <Mic style={{ width: 18, height: 18, color: "#54656f", flexShrink: 0 }} />
 
-      {/* Play/Pause */}
       <button
-        onClick={togglePlay}
-        className="w-9 h-9 rounded-full bg-[#128c7e] flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity"
-        style={{ minWidth: 36, minHeight: 36 }}
+        onClick={toggle}
+        style={{
+          width: 36, height: 36, borderRadius: "50%",
+          background: "#128c7e", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}
       >
         {playing
-          ? <Pause className="w-4 h-4 text-white" />
-          : <Play className="w-4 h-4 text-white ml-0.5" />
+          ? <Pause style={{ width: 16, height: 16, color: "white" }} />
+          : <Play style={{ width: 16, height: 16, color: "white", marginLeft: 2 }} />
         }
       </button>
 
       {/* Waveform bars */}
-      <div className="flex items-center gap-[2px] flex-1 h-8">
-        {bars.map((h, i) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+        {BAR_HEIGHTS.map((h, i) => (
           <div
             key={i}
-            className="rounded-full transition-all duration-150"
             style={{
               width: 3,
-              height: `${Math.max(4, h * 28)}px`,
-              background: playing ? accent : "#aaa",
-              opacity: playing ? 1 : 0.5,
+              height: playing ? undefined : h,
+              borderRadius: 2,
+              background: i < activeBars ? activeColor : inactiveColor,
+              flexShrink: 0,
+              animation: playing ? `waveBar 0.6s ease-in-out ${(i * 20)}ms infinite alternate` : undefined,
+              minHeight: playing ? 4 : undefined,
             }}
           />
         ))}
       </div>
 
-      {/* Time */}
-      <div className="text-[10px] text-[#54656f] shrink-0 font-mono">
-        {formatTime(currentTime)}
-        {duration > 0 && <span className="opacity-60"> / {formatTime(duration)}</span>}
-      </div>
+      <span style={{ fontSize: 11, color: "#54656f", whiteSpace: "nowrap", flexShrink: 0 }}>
+        {formatTime(current)} / {formatTime(duration)}
+      </span>
+
+      <style>{`
+        @keyframes waveBar {
+          from { height: 4px; }
+          to { height: 20px; }
+        }
+      `}</style>
     </div>
   );
 }
