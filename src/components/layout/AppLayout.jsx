@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, MessageSquare, Users, BookOpen,
   Bot, Settings, ChevronLeft, ChevronRight, Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { base44 } from "@/api/base44Client";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -24,7 +25,12 @@ const mobileNavItems = [
 
 export default function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const location = useLocation();
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -135,9 +141,13 @@ export default function AppLayout({ children }) {
             </button>
             <div className="flex items-center gap-2 pl-3 border-l border-border">
               <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-xs font-semibold text-white">A</span>
+                <span className="text-xs font-semibold text-white">
+                  {(currentUser?.full_name || "A")[0].toUpperCase()}
+                </span>
               </div>
-              <span className="text-sm font-medium hidden md:block">Admin</span>
+              <span className="text-sm font-medium hidden md:block">
+                {currentUser?.full_name || "Admin"}
+              </span>
             </div>
           </div>
         </header>

@@ -169,47 +169,45 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       reader.readAsDataURL(mediaPreview.file);
     });
 
-    const res = await base44.functions.invoke("sendWhatsAppMessage", {
-      user_id: currentUser?.id,
-      phone: conversation.customer_phone,
-      media_base64: base64,
-      media_type: mediaPreview.type,
-      media_name: mediaPreview.name,
-      caption: input.trim() || undefined,
-      conversation_id: conversation.id,
-    });
+    try {
+      const res = await base44.functions.invoke("sendWhatsAppMessage", {
+        user_id: currentUser?.id,
+        phone: conversation.customer_phone,
+        media_base64: base64,
+        media_type: mediaPreview.type,
+        media_name: mediaPreview.name,
+        caption: input.trim() || undefined,
+        conversation_id: conversation.id,
+      });
 
-    if (!res?.data?.success) {
-      setSendError({ content: mediaPreview.name, type: "media", error: res?.data?.error });
+      if (!res?.data?.success) {
+        setSendError({ content: mediaPreview.name, type: "media", error: res?.data?.error });
+        return;
+      }
+
+      await base44.entities.Message.create({
+        conversation_id: conversation.id,
+        sender: "agent",
+        message_type: mediaPreview.type,
+        content: input.trim() || mediaPreview.name,
+        media_url: base64,
+        media_name: mediaPreview.name,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        whatsapp_message_id: res.data.whatsapp_message_id || null,
+        agent_name: currentUser?.full_name || "Agent",
+      });
+
+      await base44.entities.Conversation.update(conversation.id, {
+        last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
+        last_message_time: new Date().toISOString(),
+      });
+
+      setMediaPreview(null);
+      setInput("");
+    } finally {
       setSending(false);
-      return;
     }
-
-    // Store base64 locally so the sent media is immediately viewable in chat
-    // (wa-media-id URLs can't be fetched back, so we keep the original data)
-    const storedMediaUrl = base64;
-
-    await base44.entities.Message.create({
-      conversation_id: conversation.id,
-      sender: "agent",
-      message_type: mediaPreview.type,
-      content: input.trim() || mediaPreview.name,
-      media_url: storedMediaUrl,
-      media_name: mediaPreview.name,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      whatsapp_message_id: res.data.whatsapp_message_id || null,
-      agent_name: currentUser?.full_name || "Agent",
-    });
-
-    await base44.entities.Conversation.update(conversation.id, {
-      last_message: `[${mediaPreview.type}] ${mediaPreview.name}`,
-      last_message_time: new Date().toISOString(),
-    });
-
-    setMediaPreview(null);
-    setInput("");
-    setSending(false);
   };
 
   const doSendText = async (content) => {
