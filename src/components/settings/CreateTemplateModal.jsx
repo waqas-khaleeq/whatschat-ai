@@ -213,7 +213,7 @@ export default function CreateTemplateModal({ isOpen, onClose, currentUser, onSu
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-300 text-sm"
                   rows={5}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Use {{1}}, {{2}}, etc. to mark variable positions</p>
+                <p className="text-xs text-muted-foreground mt-1">{'Use {{1}}, {{2}}, etc. to mark variable positions'}</p>
               </div>
               <div>
                 <label className="text-sm font-semibold block mb-2">Footer (Optional)</label>

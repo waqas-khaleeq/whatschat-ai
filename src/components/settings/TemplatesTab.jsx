@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { RefreshCw, Plus, Trash2, Eye, CheckCircle, Clock, AlertCircle, Pause, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import CreateTemplateModal from './CreateTemplateModal';
+import CreateTemplateModal from './CreateTemplateModal.jsx';
 
 export default function TemplatesTab({ currentUser }) {
   const [templates, setTemplates] = useState([]);
