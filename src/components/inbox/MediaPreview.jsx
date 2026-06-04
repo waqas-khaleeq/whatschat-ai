@@ -1,4 +1,4 @@
-import { X, FileText, Image, Film, Volume2 } from "lucide-react";
+import { X, FileText, Image, Film, Volume2, Send } from "lucide-react";
 
 const TYPE_META = {
   image: { icon: Image, color: "text-emerald-600", bg: "bg-emerald-50", label: "Photo" },
@@ -7,7 +7,7 @@ const TYPE_META = {
   document: { icon: FileText, color: "text-orange-600", bg: "bg-orange-50", label: "Document" },
 };
 
-export default function MediaPreview({ preview, onCancel, caption, onCaptionChange }) {
+export default function MediaPreview({ preview, onCancel, caption, onCaptionChange, onSend, sending }) {
   const meta = TYPE_META[preview.type] || TYPE_META.document;
   const Icon = meta.icon;
 
@@ -18,7 +18,8 @@ export default function MediaPreview({ preview, onCancel, caption, onCaptionChan
         <span className="text-white/60 text-xs font-medium uppercase tracking-wide">{meta.label} Preview</span>
         <button
           onClick={onCancel}
-          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+          disabled={sending}
+          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors disabled:opacity-40"
         >
           <X className="w-4 h-4 text-white" />
         </button>
@@ -28,16 +29,9 @@ export default function MediaPreview({ preview, onCancel, caption, onCaptionChan
         {/* Thumbnail */}
         <div className="shrink-0">
           {preview.type === "image" ? (
-            <img
-              src={preview.url}
-              alt="preview"
-              className="w-20 h-20 rounded-xl object-cover border-2 border-white/20"
-            />
+            <img src={preview.url} alt="preview" className="w-20 h-20 rounded-xl object-cover border-2 border-white/20" />
           ) : preview.type === "video" ? (
-            <video
-              src={preview.url}
-              className="w-20 h-20 rounded-xl object-cover border-2 border-white/20"
-            />
+            <video src={preview.url} className="w-20 h-20 rounded-xl object-cover border-2 border-white/20" />
           ) : preview.type === "audio" ? (
             <div className="flex flex-col items-center gap-1">
               <div className={`w-16 h-16 rounded-xl ${meta.bg} flex items-center justify-center`}>
@@ -52,7 +46,7 @@ export default function MediaPreview({ preview, onCancel, caption, onCaptionChan
           )}
         </div>
 
-        {/* Info & caption */}
+        {/* Info, caption & send */}
         <div className="flex-1 min-w-0">
           <p className="text-white text-sm font-medium truncate">{preview.name}</p>
           <p className="text-white/50 text-xs mb-2">{meta.label}</p>
@@ -62,9 +56,22 @@ export default function MediaPreview({ preview, onCancel, caption, onCaptionChan
               value={caption}
               onChange={(e) => onCaptionChange(e.target.value)}
               placeholder="Add a caption..."
-              className="w-full px-3 py-1.5 text-sm bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-white/40 outline-none focus:border-[#25d366]/60"
+              className="w-full px-3 py-1.5 text-sm bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-white/40 outline-none focus:border-[#25d366]/60 mb-2"
             />
           )}
+
+          <button
+            onClick={onSend}
+            disabled={sending}
+            className="flex items-center gap-2 px-4 py-2 bg-[#25d366] hover:bg-[#20b95a] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            {sending ? (
+              <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            {sending ? "Sending..." : "Send"}
+          </button>
         </div>
       </div>
     </div>

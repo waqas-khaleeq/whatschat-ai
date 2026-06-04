@@ -137,17 +137,26 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   };
 
   const handleVoiceRecord = async () => {
-    if (recording) { mediaRecorder?.stop(); setRecording(false); return; }
+    if (recording) {
+      mediaRecorder?.stop();
+      // recording state cleared in onstop handler
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mr = new MediaRecorder(stream);
+    // Pick best supported mime type for WhatsApp compatibility
+    const mimeType = ["audio/mp4", "audio/aac", "audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"]
+      .find(t => MediaRecorder.isTypeSupported(t)) || "";
+    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     const chunks = [];
-    mr.ondataavailable = (e) => chunks.push(e.data);
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     mr.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      // Use mp4 if supported (WhatsApp requires AAC/MP4 or OGG opus)
-      const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg; codecs=opus";
-      const blob = new Blob(chunks, { type: mimeType });
-      const ext = mimeType.includes("mp4") ? "voice-message.mp4" : "voice-message.ogg";
+      setRecording(false);
+      if (chunks.length === 0) return;
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      const ext = (mr.mimeType || "").includes("mp4") ? "voice-message.mp4"
+        : (mr.mimeType || "").includes("ogg") ? "voice-message.ogg"
+        : "voice-message.webm";
       const url = URL.createObjectURL(blob);
       const file = new File([blob], ext, { type: blob.type });
       setMediaPreview({ file, url, type: "audio", name: ext });
@@ -510,9 +519,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       {mediaPreview && (
         <MediaPreview
           preview={mediaPreview}
-          onCancel={() => setMediaPreview(null)}
+          onCancel={() => { if (!sending) setMediaPreview(null); }}
           caption={input}
           onCaptionChange={setInput}
+          onSend={sendMedia}
+          sending={sending}
         />
       )}
 
