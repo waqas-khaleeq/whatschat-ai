@@ -1,9 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
-const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
-const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
-
 // Returns the WhatsApp media ID prefixed so the frontend knows it needs proxying
 function storeMediaId(mediaId) {
   return mediaId ? `wa-media-id:${mediaId}` : null;
@@ -12,238 +8,204 @@ function storeMediaId(mediaId) {
 Deno.serve(async (req) => {
   const url = new URL(req.url);
 
-  // ── GET: webhook verification ──────────────────────────────────────────────
+  // ── GET: webhook verification (multi-tenant) ───────────────────────────────
   if (req.method === "GET") {
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      return new Response(challenge, { status: 200 });
+    if (mode === "subscribe" && token) {
+      const base44 = createClientFromRequest(req);
+      try {
+        const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ verify_token: token, is_active: true });
+        if (configs.length > 0) {
+          return new Response(challenge, { status: 200 });
+        }
+      } catch (e) {
+        console.error("Webhook verify lookup error:", e.message);
+      }
     }
     return new Response("Forbidden", { status: 403 });
   }
 
   // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === "POST") {
-    const base44 = createClientFromRequest(req);
-    const body = await req.json();
+    // Always return 200 to Meta — wrap everything in try/catch
+    try {
+      const base44 = createClientFromRequest(req);
+      const body = await req.json();
 
-    // ── Admin utilities (called from Settings page) ──────────────────────────
-    if (body._getVerifyToken) {
-      return Response.json({ verifyToken: VERIFY_TOKEN });
-    }
-
-    if (body._checkConnection) {
-      if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
-        return Response.json({ connected: false, reason: "Missing credentials" });
+      // ── Admin utilities (called from Settings page) ─────────────────────
+      if (body._getVerifyToken) {
+        return Response.json({ verifyToken: "use UserWAConfig.verify_token" });
       }
-      const checkRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}`, {
-        headers: { "Authorization": `Bearer ${ACCESS_TOKEN}` },
+
+      if (body._checkConnection) {
+        return Response.json({ connected: false, reason: "Use verifyWhatsAppConnection function" });
+      }
+
+      if (body._send && body.phone) {
+        return Response.json({ error: "Use sendWhatsAppMessage function" }, { status: 400 });
+      }
+
+      if (body._test && body.phone) {
+        return Response.json({ error: "Use sendWhatsAppMessage function" }, { status: 400 });
+      }
+
+      // ── Incoming webhook from Meta ────────────────────────────────────────
+      const entry = body?.entry?.[0];
+      const change = entry?.changes?.[0]?.value;
+
+      if (!change) {
+        return new Response("OK", { status: 200 });
+      }
+
+      // Extract phone number ID from metadata to look up user config
+      const phoneNumberId = change?.metadata?.phone_number_id;
+      if (!phoneNumberId) {
+        return Response.json({ status: "no_phone_id" }, { status: 200 });
+      }
+
+      // Find user config by phone number ID
+      const configs = await base44.asServiceRole.entities.UserWAConfig.filter({
+        phone_number_id: phoneNumberId,
+        is_active: true,
       });
-      const checkData = await checkRes.json();
-      if (checkRes.ok && checkData.id) {
-        return Response.json({
-          connected: true,
-          display_phone_number: checkData.display_phone_number,
-          verified_name: checkData.verified_name,
-        });
-      }
-      return Response.json({ connected: false, reason: checkData.error?.message || "Invalid credentials" });
-    }
 
-    // ── Manual agent send (text or media) ────────────────────────────────────
-    if (body._send && body.phone) {
-      const toPhone = String(body.phone).replace(/[^\d]/g, "");
-      let msgPayload;
-
-      if (body.media_url && body.media_type) {
-        const typeMap = { image: "image", video: "video", document: "document", audio: "audio" };
-        const waType = typeMap[body.media_type] || "document";
-        const mediaObj = { link: body.media_url };
-        if (body.media_type === "document" && body.media_name) mediaObj.filename = body.media_name;
-        if (body.caption) mediaObj.caption = body.caption;
-        msgPayload = {
-          messaging_product: "whatsapp",
-          to: toPhone,
-          type: waType,
-          [waType]: mediaObj,
-        };
-      } else if (body.message) {
-        msgPayload = {
-          messaging_product: "whatsapp",
-          to: toPhone,
-          type: "text",
-          text: { body: body.message },
-        };
-      } else {
-        return Response.json({ error: "No message or media provided" }, { status: 400 });
+      if (!configs.length) {
+        console.log("No UserWAConfig for phone_number_id:", phoneNumberId);
+        return Response.json({ status: "unregistered" }, { status: 200 });
       }
 
-      console.log("Sending to phone:", toPhone, "Payload:", JSON.stringify(msgPayload));
-      const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(msgPayload),
-      });
-      const sendData = await sendRes.json();
-      console.log("WhatsApp send response:", JSON.stringify(sendData));
-      if (!sendRes.ok) {
-        return Response.json({ success: false, error: sendData.error?.message || "Failed", details: sendData }, { status: 400 });
-      }
-      return Response.json({ success: true, data: sendData });
-    }
+      const userConfig = configs[0];
 
-    // ── Test message from Settings page ──────────────────────────────────────
-    if (body._test && body.phone) {
-      console.log("Test send to:", body.phone);
-      const testRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: body.phone,
-          type: "text",
-          text: { body: "✅ WhatsApp connection test successful! Your WhatsChat AI inbox is connected and ready." },
-        }),
-      });
-      const testData = await testRes.json();
-      console.log("Test message response:", JSON.stringify(testData));
-      if (!testRes.ok) {
-        return Response.json({ error: testData.error?.message || "Failed", details: testData }, { status: 400 });
-      }
-      return Response.json({ success: true, data: testData });
-    }
-
-    // ── Incoming webhook from Meta ────────────────────────────────────────────
-    const entry = body?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-
-    if (!value) {
-      return new Response("OK", { status: 200 });
-    }
-
-    // Handle delivery/read status updates
-    if (value.statuses && value.statuses.length > 0) {
-      for (const status of value.statuses) {
-        const waId = status.id;
-        const statusType = status.status;
-        const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
-        try {
-          const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
-          if (msgs.length > 0) {
-            const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
-            await base44.asServiceRole.entities.Message.update(msgs[0].id, {
-              status: newStatus,
-            });
+      // ── Handle delivery/read status updates ─────────────────────────────
+      if (change.statuses && change.statuses.length > 0) {
+        for (const status of change.statuses) {
+          const waId = status.id;
+          const statusType = status.status;
+          try {
+            const msgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waId });
+            if (msgs.length > 0) {
+              const newStatus = statusType === "read" ? "read" : statusType === "delivered" ? "delivered" : "sent";
+              await base44.asServiceRole.entities.Message.update(msgs[0].id, { status: newStatus });
+            }
+          } catch (err) {
+            console.error("Status update error:", err.message);
           }
-        } catch (err) {
-          console.error("Status update error:", err.message);
         }
-      }
-    }
-
-    if (!value.messages || value.messages.length === 0) {
-      return new Response("OK", { status: 200 });
-    }
-
-    for (const message of value.messages) {
-      const phone = message.from;
-      const waMessageId = message.id;
-      const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
-
-      // ── Deduplication: skip already-processed messages ────────────────────
-      const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
-      if (existingMsgs.length > 0) {
-        console.log(`Duplicate message ${waMessageId}, skipping.`);
-        continue;
+        return new Response("OK", { status: 200 });
       }
 
-      // ── Parse message content ─────────────────────────────────────────────
-      let messageType = "text";
-      let content = "";
-      let mediaUrl = null;
-      let mediaName = null;
-
-      if (message.type === "text") {
-        content = message.text?.body || "";
-        if (!content.trim()) continue;
-      } else if (message.type === "audio") {
-        messageType = "audio";
-        mediaUrl = storeMediaId(message.audio?.id);
-        content = "[Voice Message]";
-        mediaName = `voice-${waMessageId}.ogg`;
-      } else if (message.type === "image") {
-        messageType = "image";
-        mediaUrl = storeMediaId(message.image?.id);
-        content = message.image?.caption || "[Image]";
-        mediaName = `image-${waMessageId}`;
-      } else if (message.type === "document") {
-        messageType = "document";
-        mediaUrl = storeMediaId(message.document?.id);
-        content = message.document?.filename || "[Document]";
-        mediaName = message.document?.filename || null;
-      } else if (message.type === "video") {
-        messageType = "video";
-        mediaUrl = storeMediaId(message.video?.id);
-        content = message.video?.caption || "[Video]";
-        mediaName = `video-${waMessageId}`;
-      } else {
-        continue;
+      if (!change.messages || change.messages.length === 0) {
+        return new Response("OK", { status: 200 });
       }
 
-      // ── Find or create conversation ───────────────────────────────────────
-      const conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
-      let conversation = conversations[0];
+      for (const message of change.messages) {
+        const phone = message.from;
+        const waMessageId = message.id;
+        const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
 
-      if (!conversation) {
-        const contact = value.contacts?.find(c => c.wa_id === phone);
-        conversation = await base44.asServiceRole.entities.Conversation.create({
-          customer_phone: phone,
-          customer_name: contact?.profile?.name || phone,
-          last_message: content,
-          last_message_time: timestamp,
-          unread_count: 1,
-          status: "new",
-          handling_mode: "ai",
+        // ── Deduplication ────────────────────────────────────────────────
+        const existingMsgs = await base44.asServiceRole.entities.Message.filter({ whatsapp_message_id: waMessageId });
+        if (existingMsgs.length > 0) {
+          console.log(`Duplicate message ${waMessageId}, skipping.`);
+          continue;
+        }
+
+        // ── Parse message content ────────────────────────────────────────
+        let messageType = "text";
+        let content = "";
+        let mediaUrl = null;
+        let mediaName = null;
+
+        if (message.type === "text") {
+          content = message.text?.body || "";
+          if (!content.trim()) continue;
+        } else if (message.type === "audio") {
+          messageType = "audio";
+          mediaUrl = storeMediaId(message.audio?.id);
+          content = "[Voice Message]";
+          mediaName = `voice-${waMessageId}.ogg`;
+        } else if (message.type === "image") {
+          messageType = "image";
+          mediaUrl = storeMediaId(message.image?.id);
+          content = message.image?.caption || "[Image]";
+          mediaName = `image-${waMessageId}`;
+        } else if (message.type === "document") {
+          messageType = "document";
+          mediaUrl = storeMediaId(message.document?.id);
+          content = message.document?.filename || "[Document]";
+          mediaName = message.document?.filename || null;
+        } else if (message.type === "video") {
+          messageType = "video";
+          mediaUrl = storeMediaId(message.video?.id);
+          content = message.video?.caption || "[Video]";
+          mediaName = `video-${waMessageId}`;
+        } else {
+          continue;
+        }
+
+        // ── Find or create conversation ──────────────────────────────────
+        const conversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
+        let conversation = conversations[0];
+
+        if (!conversation) {
+          const contact = change.contacts?.find(c => c.wa_id === phone);
+          conversation = await base44.asServiceRole.entities.Conversation.create({
+            customer_phone: phone,
+            customer_name: contact?.profile?.name || phone,
+            last_message: content,
+            last_message_time: timestamp,
+            unread_count: 1,
+            status: "new",
+            handling_mode: "ai",
+            ai_paused: false,
+          });
+        } else {
+          await base44.asServiceRole.entities.Conversation.update(conversation.id, {
+            last_message: content,
+            last_message_time: timestamp,
+            unread_count: (conversation.unread_count || 0) + 1,
+          });
+        }
+
+        // ── Save incoming message ────────────────────────────────────────
+        await base44.asServiceRole.entities.Message.create({
+          conversation_id: conversation.id,
+          sender: "customer",
+          content: content,
+          message_type: messageType,
+          media_url: mediaUrl,
+          media_name: mediaName,
+          whatsapp_message_id: waMessageId,
+          timestamp: timestamp,
+          status: "delivered",
         });
-      } else {
-        await base44.asServiceRole.entities.Conversation.update(conversation.id, {
-          last_message: content,
-          last_message_time: timestamp,
-          unread_count: (conversation.unread_count || 0) + 1,
-        });
-      }
 
-      // ── Save incoming message ─────────────────────────────────────────────
-      await base44.asServiceRole.entities.Message.create({
-        conversation_id: conversation.id,
-        sender: "customer",
-        content: content,
-        message_type: messageType,
-        media_url: mediaUrl,
-        media_name: mediaName,
-        whatsapp_message_id: waMessageId,
-        timestamp: timestamp,
-        status: "delivered",
-      });
+        // ── AI auto-reply guard ──────────────────────────────────────────
+        // Only if: text message + mode is ai + not paused + not closed
+        const freshConvs = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
+        const freshConv = freshConvs[0];
 
-      // ── AI auto-reply: ONLY if handling_mode is exactly "ai" ────────────
-      const freshConversations = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
-      const freshConversation = freshConversations[0];
+        const aiShouldReply =
+          messageType === "text" &&
+          content.trim() &&
+          freshConv?.handling_mode === "ai" &&
+          freshConv?.ai_paused !== true &&
+          freshConv?.status !== "closed";
 
-      if (freshConversation?.handling_mode === "ai" && messageType === "text" && content.trim()) {
-        console.log(`AI replying to conversation ${freshConversation.id}`);
+        if (!aiShouldReply) {
+          if (freshConv?.handling_mode !== "ai" || freshConv?.ai_paused) {
+            console.log(`Conversation ${freshConv?.id} — AI skipped (mode: ${freshConv?.handling_mode}, paused: ${freshConv?.ai_paused})`);
+          }
+          continue;
+        }
+
+        console.log(`AI replying to conversation ${freshConv.id}`);
         try {
           const [prevMessages, kbEntries, promptSettings] = await Promise.all([
-            base44.asServiceRole.entities.Message.filter({ conversation_id: freshConversation.id }, "timestamp", 20),
+            base44.asServiceRole.entities.Message.filter({ conversation_id: freshConv.id }, "timestamp", 20),
             base44.asServiceRole.entities.KnowledgeBase.filter({ is_active: true }, "created_date", 50),
             base44.asServiceRole.entities.AppSettings.filter({ key: "ai_system_prompt" }),
           ]);
@@ -278,10 +240,18 @@ Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
             continue;
           }
 
-          const sendRes = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+          // ── Race condition check — re-fetch conversation before sending ──
+          const raceCheckConvs = await base44.asServiceRole.entities.Conversation.filter({ customer_phone: phone });
+          const raceCheckConv = raceCheckConvs[0];
+          if (raceCheckConv?.handling_mode !== "ai" || raceCheckConv?.ai_paused === true) {
+            console.log("AI response discarded — agent took over during LLM processing.");
+            continue;
+          }
+
+          const sendRes = await fetch(`https://graph.facebook.com/v18.0/${userConfig.phone_number_id}/messages`, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${ACCESS_TOKEN}`,
+              "Authorization": `Bearer ${userConfig.access_token}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -299,7 +269,7 @@ Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
           }
 
           await base44.asServiceRole.entities.Message.create({
-            conversation_id: freshConversation.id,
+            conversation_id: freshConv.id,
             sender: "ai",
             content: aiReply,
             message_type: "text",
@@ -308,7 +278,7 @@ Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
             whatsapp_message_id: sendData.messages?.[0]?.id || null,
           });
 
-          await base44.asServiceRole.entities.Conversation.update(freshConversation.id, {
+          await base44.asServiceRole.entities.Conversation.update(freshConv.id, {
             last_message: aiReply,
             last_message_time: new Date().toISOString(),
           });
@@ -316,12 +286,14 @@ Respond naturally and helpfully. Keep it brief (1-3 sentences max).`,
         } catch (err) {
           console.error("AI reply error:", err.message);
         }
-      } else if (freshConversation?.handling_mode !== "ai") {
-        console.log(`Conversation ${freshConversation?.id} is in "${freshConversation?.handling_mode}" mode — AI skipped.`);
       }
-    }
 
-    return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200 });
+
+    } catch (error) {
+      console.error("Webhook processing error:", error);
+      return Response.json({ status: "error" }, { status: 200 });
+    }
   }
 
   return new Response("Method Not Allowed", { status: 405 });

@@ -18,6 +18,7 @@ import Analytics from './pages/Analytics';
 import Integrations from './pages/Integrations';
 import Team from './pages/Team';
 import Settings from './pages/Settings';
+import SetupWizard from './pages/SetupWizard';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -56,6 +57,7 @@ const AuthenticatedApp = () => {
       <Route path="/integrations" element={<Integrations />} />
       <Route path="/team" element={<Team />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/setup" element={<SetupWizard />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

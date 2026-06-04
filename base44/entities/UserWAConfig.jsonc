@@ -1,0 +1,54 @@
+{
+  "name": "UserWAConfig",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "phone_number_id": {
+      "type": "string"
+    },
+    "access_token": {
+      "type": "string"
+    },
+    "verify_token": {
+      "type": "string"
+    },
+    "waba_id": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "webhook_registered": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "connection_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "connected",
+        "error"
+      ],
+      "default": "pending"
+    },
+    "last_verified_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "error_message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "phone_number_id",
+    "access_token",
+    "verify_token"
+  ]
+}

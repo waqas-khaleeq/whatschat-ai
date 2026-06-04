@@ -51,6 +51,10 @@
       ],
       "default": "ai"
     },
+    "ai_paused": {
+      "type": "boolean",
+      "default": false
+    },
     "assigned_to": {
       "type": "string"
     },

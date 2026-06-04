@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import AppLayout from "@/components/layout/AppLayout";
 import ConversationList from "@/components/inbox/ConversationList";
@@ -12,25 +13,41 @@ export default function Inbox() {
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
-    base44.entities.Conversation.list("-last_message_time", 100)
-      .then((data) => {
-        // Only show real conversations from WhatsApp (created by service role webhook)
-        const real = data.filter(c => 
-          c.created_by?.startsWith("service+") || 
-          /^\d{10,15}$/.test((c.customer_phone || "").replace(/\+/g, ""))
-        );
-        setConversations(real);
-        if (id) {
-          const found = data.find((c) => c.id === id);
-          if (found) setSelected(found);
-        }
-      })
-      .finally(() => setLoading(false));
+    base44.auth.me().then(u => setCurrentUser(u)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Check setup: if no UserWAConfig for this user, redirect to setup
+    base44.entities.UserWAConfig.filter({ user_id: currentUser.id, is_active: true })
+      .then(configs => {
+        if (!configs.length) {
+          navigate("/setup");
+          return;
+        }
+        // Load conversations
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get("id");
+        base44.entities.Conversation.list("-last_message_time", 100)
+          .then((data) => {
+            const real = data.filter(c =>
+              c.created_by?.startsWith("service+") ||
+              /^\d{10,15}$/.test((c.customer_phone || "").replace(/\+/g, ""))
+            );
+            setConversations(real);
+            if (id) {
+              const found = data.find((c) => c.id === id);
+              if (found) setSelected(found);
+            }
+          })
+          .finally(() => setLoading(false));
+      });
+  }, [currentUser, navigate]);
 
   const handleSelect = (conv) => {
     setSelected(conv);
@@ -52,7 +69,11 @@ export default function Inbox() {
 
   const handleHandoverChange = (mode) => {
     if (!selected) return;
-    const updated = { ...selected, handling_mode: mode };
+    const updated = {
+      ...selected,
+      handling_mode: mode === "paused" ? selected.handling_mode : mode,
+      ai_paused: mode === "paused",
+    };
     handleUpdate(updated);
   };
 
@@ -69,25 +90,23 @@ export default function Inbox() {
   return (
     <AppLayout>
       <div className="flex h-full overflow-hidden">
-        {/* Left: conversation list */}
         <div className="w-72 shrink-0">
           <ConversationList
             conversations={conversations}
             selectedId={selected?.id}
             onSelect={handleSelect}
-            currentUser="admin"
+            currentUser={currentUser?.full_name || "Agent"}
             onNewChat={() => setShowNewChat(true)}
           />
         </div>
 
-        {/* Center: chat */}
         <ChatArea
           conversation={selected}
           onHandoverChange={handleHandoverChange}
           onShowDetails={() => setShowDetails(true)}
+          currentUser={currentUser}
         />
 
-        {/* Right: lead panel — only when details open */}
         {showDetails && (
           <LeadPanel
             conversation={selected}

@@ -1,6 +1,12 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+function mimeToMediaType(mime) {
+  if (!mime) return "document";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  return "document";
+}
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -15,19 +21,27 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    let { media_url } = body;
+    const { media_url, user_id } = body;
 
     if (!media_url) {
       return Response.json({ error: "No media_url provided" }, { status: 400 });
     }
 
+    // Look up user config for the access token
+    const userId = user_id || user.id;
+    const configs = await base44.asServiceRole.entities.UserWAConfig.filter({ user_id: userId, is_active: true });
+    const accessToken = configs.length > 0 ? configs[0].access_token : null;
+
+    if (!accessToken) {
+      return Response.json({ error: "No WhatsApp config found for user" }, { status: 400 });
+    }
+
     let fetchUrl = media_url;
 
-    // Handle our prefixed media ID format: "wa-media-id:<id>"
     if (media_url.startsWith("wa-media-id:")) {
       const mediaId = media_url.replace("wa-media-id:", "");
       const metaRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
-        headers: { "Authorization": `Bearer ${ACCESS_TOKEN}` },
+        headers: { "Authorization": `Bearer ${accessToken}` },
       });
       const metaData = await metaRes.json();
       if (!metaRes.ok || !metaData.url) {
@@ -36,9 +50,9 @@ Deno.serve(async (req) => {
       }
       fetchUrl = metaData.url;
     } else if (!media_url.startsWith("http")) {
-      // Raw media ID (legacy)
+      // Raw legacy media ID
       const metaRes = await fetch(`https://graph.facebook.com/v18.0/${media_url}`, {
-        headers: { "Authorization": `Bearer ${ACCESS_TOKEN}` },
+        headers: { "Authorization": `Bearer ${accessToken}` },
       });
       const metaData = await metaRes.json();
       if (!metaRes.ok || !metaData.url) {
@@ -46,11 +60,9 @@ Deno.serve(async (req) => {
       }
       fetchUrl = metaData.url;
     }
-    // else: it's already a full URL (e.g. graph.facebook.com direct URL) — use as-is with auth header
 
-    // Fetch the actual media bytes with the access token
     const mediaRes = await fetch(fetchUrl, {
-      headers: { "Authorization": `Bearer ${ACCESS_TOKEN}` },
+      headers: { "Authorization": `Bearer ${accessToken}` },
     });
 
     if (!mediaRes.ok) {
@@ -58,14 +70,19 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Failed to fetch media from WhatsApp" }, { status: 400 });
     }
 
-    const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
+    const mimeType = mediaRes.headers.get("content-type") || "application/octet-stream";
     const buffer = await mediaRes.arrayBuffer();
-
-    // Return as base64 data URL so the frontend can display/download it directly
     const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-    const dataUrl = `data:${contentType};base64,${base64}`;
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    const mediaType = mimeToMediaType(mimeType);
 
-    return Response.json({ data_url: dataUrl, content_type: contentType });
+    return new Response(JSON.stringify({ data_url: dataUrl, mime_type: mimeType, media_type: mediaType }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, max-age=300",
+      },
+    });
   } catch (error) {
     console.error("getWhatsAppMedia error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
