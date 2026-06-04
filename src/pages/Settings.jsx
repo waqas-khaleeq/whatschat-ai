@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
+import PipelineSettings from "@/components/settings/PipelineSettings";
 
 const SECTIONS = [
   { key: "whatsapp", label: "WhatsApp", icon: Smartphone },
@@ -559,23 +560,7 @@ export default function Settings() {
 
 
       case "pipeline":
-        return (
-          <Card className="border-border/60">
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Lead Pipeline Stages</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {["New", "Contacted", "Qualified", "Appointment Booked", "Follow Up", "Won", "Lost", "Closed"].map((stage, i) => (
-                  <div key={stage} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/50">
-                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-primary">{i + 1}</span>
-                    </div>
-                    <span className="text-sm font-medium flex-1">{stage}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        );
+        return <PipelineSettings />;
 
       default:
         return <p className="text-sm text-muted-foreground">Coming soon...</p>;

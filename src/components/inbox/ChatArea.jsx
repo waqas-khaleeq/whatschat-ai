@@ -144,10 +144,13 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
     mr.ondataavailable = (e) => chunks.push(e.data);
     mr.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" });
+      // Use mp4 if supported (WhatsApp requires AAC/MP4 or OGG opus)
+      const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg; codecs=opus";
+      const blob = new Blob(chunks, { type: mimeType });
+      const ext = mimeType.includes("mp4") ? "voice-message.mp4" : "voice-message.ogg";
       const url = URL.createObjectURL(blob);
-      const file = new File([blob], "voice-message.ogg", { type: blob.type });
-      setMediaPreview({ file, url, type: "audio", name: "Voice Message" });
+      const file = new File([blob], ext, { type: blob.type });
+      setMediaPreview({ file, url, type: "audio", name: ext });
     };
     mr.start();
     setMediaRecorder(mr);
@@ -182,7 +185,9 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
       return;
     }
 
-    const storedMediaUrl = res.data.media_id ? `wa-media-id:${res.data.media_id}` : base64;
+    // Store base64 locally so the sent media is immediately viewable in chat
+    // (wa-media-id URLs can't be fetched back, so we keep the original data)
+    const storedMediaUrl = base64;
 
     await base44.entities.Message.create({
       conversation_id: conversation.id,
@@ -451,7 +456,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
           grouped.map((item, i) =>
             item.type === "divider"
               ? <DateDivider key={item.key} date={item.date} />
-              : <MessageBubble key={item.msg.id || i} msg={item.msg} userId={userId} />
+              : <MessageBubble key={item.msg.id || i} msg={item.msg} userId={userId} conversation={liveConv} />
           )
         )}
         <div ref={bottomRef} />

@@ -55,10 +55,11 @@ function MediaBubble({ msg, isSent, userId }) {
     return () => obs.disconnect();
   }, []);
 
-  const { result, loading, error } = useProxiedMedia(visible ? msg.media_url : null, userId);
+  const isBase64 = msg.media_url?.startsWith("data:");
+  const { result, loading, error } = useProxiedMedia(visible && !isBase64 ? msg.media_url : null, userId);
 
-  const mediaType = result?.media_type || msg.message_type;
-  const dataUrl = result?.data_url;
+  const mediaType = isBase64 ? msg.message_type : (result?.media_type || msg.message_type);
+  const dataUrl = isBase64 ? msg.media_url : result?.data_url;
   const filename = result?.filename || msg.media_name || "file";
 
   return (
@@ -196,7 +197,7 @@ function MediaBubble({ msg, isSent, userId }) {
 }
 
 // ── Main MessageBubble ─────────────────────────────────────────────────────
-export default function MessageBubble({ msg, userId }) {
+export default function MessageBubble({ msg, userId, conversation }) {
   const isCustomer = msg.sender === "customer";
   const isSystem = msg.sender === "system";
   const isNote = msg.message_type === "internal_note";
@@ -243,7 +244,7 @@ export default function MessageBubble({ msg, userId }) {
       {isCustomer && (
         <div className="w-7 h-7 rounded-full bg-[#dfe5e7] flex items-center justify-center shrink-0 mr-1.5 mt-auto mb-0.5">
           <span className="text-[11px] font-bold text-[#54656f]">
-            {(msg.content?.[0] || "C").toUpperCase()}
+            {(conversation?.customer_name || conversation?.customer_phone || "C")[0].toUpperCase()}
           </span>
         </div>
       )}
@@ -257,12 +258,7 @@ export default function MessageBubble({ msg, userId }) {
             <span className="text-[10px] text-blue-500 font-medium">AI Agent</span>
           </div>
         )}
-        {isSent && msg.sender === "agent" && msg.agent_name && (
-          <div className="flex items-center gap-1 mb-0.5 justify-end px-1">
-            <User className="w-3 h-3 text-[#128c7e]" />
-            <span className="text-[10px] text-[#128c7e] font-medium">{msg.agent_name}</span>
-          </div>
-        )}
+        
 
         <div className={cn(
           "relative px-3 py-2 shadow-sm",
