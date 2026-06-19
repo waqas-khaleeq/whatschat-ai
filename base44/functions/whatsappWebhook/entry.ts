@@ -101,6 +101,14 @@ Deno.serve(async (req) => {
           content = message.text?.body || "";
           if (!content.trim()) continue;
 
+        } else if (message.type === "button") {
+          // Quick Reply button tapped on a template message
+          // Meta payload: message.button.text = the button label (e.g. "YES")
+          const buttonText = message.button?.text || "";
+          const buttonPayload = message.button?.payload || "";
+          messageType = "text";
+          content = buttonText || buttonPayload || "[Button Reply]";
+
         } else if (message.type === "interactive") {
           // Button reply from a template or interactive message
           const interactiveType = message.interactive?.type;
