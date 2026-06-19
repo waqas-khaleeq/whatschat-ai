@@ -52,7 +52,6 @@ function parseVariableLabels(labelsJson) {
 // ── Template picker dropdown ──────────────────────────────────────────────────
 function TemplatePicker({ templates, selected, onSelect }) {
   const [open, setOpen] = useState(false);
-
   const approved = templates.filter(t => t.status === "APPROVED");
 
   return (
@@ -76,7 +75,8 @@ function TemplatePicker({ templates, selected, onSelect }) {
       </button>
 
       {open && approved.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-52 overflow-y-auto">
+        /* Render upward so it never goes off-screen below the button */
+        <div className="absolute z-50 bottom-full mb-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-44 overflow-y-auto">
           {approved.map(t => (
             <button
               key={t.id}
@@ -320,11 +320,20 @@ export default function NewChatModal({ onClose, onConversationCreated, currentUs
     (mode === "template" && !selectedTemplate);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      {/*
+        The modal is a flex column with a capped height.
+        - Header: fixed at top
+        - Body: scrollable middle zone (overflow-y-auto)
+        - Footer: pinned send button always visible at bottom
+      */}
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col"
+        style={{ maxHeight: "calc(100vh - 2rem)" }}
+      >
 
-        {/* Header */}
-        <div className="bg-[#128c7e] px-5 py-4 flex items-center justify-between">
+        {/* Header — always visible */}
+        <div className="bg-[#128c7e] px-5 py-4 flex items-center justify-between rounded-t-2xl shrink-0">
           <div className="flex items-center gap-2">
             <MessageSquarePlus className="w-5 h-5 text-white" />
             <span className="text-white font-semibold text-base">New Chat</span>
@@ -334,9 +343,9 @@ export default function NewChatModal({ onClose, onConversationCreated, currentUs
           </button>
         </div>
 
-        {/* Step 1 — Phone + Name */}
+        {/* Step 1 — Phone + Name (no send button pinning needed, content is short) */}
         {step === 1 && (
-          <div className="p-5 space-y-4">
+          <div className="p-5 space-y-4 overflow-y-auto">
             <p className="text-sm text-[#667781]">Enter the WhatsApp number you want to message.</p>
             <div>
               <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
@@ -379,138 +388,143 @@ export default function NewChatModal({ onClose, onConversationCreated, currentUs
           </div>
         )}
 
-        {/* Step 2 — Message (free or template) */}
+        {/* Step 2 — split into scrollable body + pinned footer */}
         {step === 2 && (
-          <div className="p-5 space-y-4">
+          <>
+            {/* Scrollable content zone */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
 
-            {/* Contact chip */}
-            <div className="flex items-center gap-2 bg-[#f0f2f5] rounded-xl px-3 py-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#128c7e] to-[#25d366] flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-white">{(name || phone)[0]?.toUpperCase()}</span>
+              {/* Contact chip */}
+              <div className="flex items-center gap-2 bg-[#f0f2f5] rounded-xl px-3 py-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#128c7e] to-[#25d366] flex items-center justify-center shrink-0">
+                  <span className="text-xs font-bold text-white">{(name || phone)[0]?.toUpperCase()}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#111b21] truncate">{name || normalizePhone(phone)}</p>
+                  <p className="text-xs text-[#667781]">+{normalizePhone(phone)}</p>
+                </div>
+                <button
+                  onClick={() => { setStep(1); setError(""); }}
+                  className="ml-auto text-xs text-[#128c7e] underline shrink-0"
+                >
+                  Edit
+                </button>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#111b21] truncate">{name || normalizePhone(phone)}</p>
-                <p className="text-xs text-[#667781]">+{normalizePhone(phone)}</p>
+
+              {/* Mode toggle */}
+              <div className="flex gap-1 bg-[#f0f2f5] rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => { setMode("free"); setError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    mode === "free"
+                      ? "bg-white text-[#128c7e] shadow-sm"
+                      : "text-[#667781] hover:text-[#111b21]"
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Free Message
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode("template"); setError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    mode === "template"
+                      ? "bg-white text-[#128c7e] shadow-sm"
+                      : "text-[#667781] hover:text-[#111b21]"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Use Template
+                </button>
               </div>
-              <button
-                onClick={() => { setStep(1); setError(""); }}
-                className="ml-auto text-xs text-[#128c7e] underline shrink-0"
-              >
-                Edit
-              </button>
-            </div>
 
-            {/* Mode toggle */}
-            <div className="flex gap-1 bg-[#f0f2f5] rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => { setMode("free"); setError(""); }}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  mode === "free"
-                    ? "bg-white text-[#128c7e] shadow-sm"
-                    : "text-[#667781] hover:text-[#111b21]"
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Free Message
-              </button>
-              <button
-                type="button"
-                onClick={() => { setMode("template"); setError(""); }}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  mode === "template"
-                    ? "bg-white text-[#128c7e] shadow-sm"
-                    : "text-[#667781] hover:text-[#111b21]"
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                Use Template
-              </button>
-            </div>
-
-            {/* Free message panel */}
-            {mode === "free" && (
-              <div>
-                <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
-                  Message <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  autoFocus
-                  value={firstMessage}
-                  onChange={e => setFirstMessage(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder="Type your first message…"
-                  rows={4}
-                  className="w-full bg-[#f0f2f5] rounded-xl px-3 py-2.5 text-sm text-[#111b21] placeholder:text-[#667781] outline-none resize-none"
-                />
-              </div>
-            )}
-
-            {/* Template panel */}
-            {mode === "template" && (
-              <div className="space-y-3">
+              {/* Free message panel */}
+              {mode === "free" && (
                 <div>
                   <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
-                    Select Template <span className="text-red-500">*</span>
+                    Message <span className="text-red-500">*</span>
                   </label>
-                  {templatesLoading ? (
-                    <div className="flex items-center gap-2 bg-[#f0f2f5] rounded-xl px-3 py-2.5">
-                      <div className="w-4 h-4 border-2 border-[#128c7e]/30 border-t-[#128c7e] rounded-full animate-spin" />
-                      <span className="text-sm text-[#667781]">Loading templates…</span>
-                    </div>
-                  ) : (
-                    <TemplatePicker
-                      templates={templates}
-                      selected={selectedTemplate}
-                      onSelect={t => { setSelectedTemplate(t); setError(""); }}
-                    />
-                  )}
-                  {!templatesLoading && templates.filter(t => t.status === "APPROVED").length === 0 && (
-                    <p className="text-[11px] text-amber-600 mt-1">
-                      No approved templates yet. Sync or create templates in Settings → Templates.
-                    </p>
+                  <textarea
+                    autoFocus
+                    value={firstMessage}
+                    onChange={e => setFirstMessage(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                    placeholder="Type your first message…"
+                    rows={4}
+                    className="w-full bg-[#f0f2f5] rounded-xl px-3 py-2.5 text-sm text-[#111b21] placeholder:text-[#667781] outline-none resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Template panel */}
+              {mode === "template" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
+                      Select Template <span className="text-red-500">*</span>
+                    </label>
+                    {templatesLoading ? (
+                      <div className="flex items-center gap-2 bg-[#f0f2f5] rounded-xl px-3 py-2.5">
+                        <div className="w-4 h-4 border-2 border-[#128c7e]/30 border-t-[#128c7e] rounded-full animate-spin" />
+                        <span className="text-sm text-[#667781]">Loading templates…</span>
+                      </div>
+                    ) : (
+                      <TemplatePicker
+                        templates={templates}
+                        selected={selectedTemplate}
+                        onSelect={t => { setSelectedTemplate(t); setError(""); }}
+                      />
+                    )}
+                    {!templatesLoading && templates.filter(t => t.status === "APPROVED").length === 0 && (
+                      <p className="text-[11px] text-amber-600 mt-1">
+                        No approved templates yet. Sync or create templates in Settings &rarr; Templates.
+                      </p>
+                    )}
+                  </div>
+
+                  {selectedTemplate && (
+                    <>
+                      <VariableInputs
+                        template={selectedTemplate}
+                        variables={templateVariables}
+                        onChange={setTemplateVariables}
+                      />
+                      <TemplatePreview
+                        template={selectedTemplate}
+                        variables={templateVariables}
+                      />
+                    </>
                   )}
                 </div>
-
-                {selectedTemplate && (
-                  <>
-                    <VariableInputs
-                      template={selectedTemplate}
-                      variables={templateVariables}
-                      onChange={setTemplateVariables}
-                    />
-                    <TemplatePreview
-                      template={selectedTemplate}
-                      variables={templateVariables}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <p className="text-xs text-red-600">{error}</p>
-              </div>
-            )}
-
-            {/* Send button */}
-            <Button
-              onClick={handleSend}
-              disabled={sendDisabled}
-              className="w-full bg-[#128c7e] hover:bg-[#0f7a6d] text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Sending…
-                </span>
-              ) : (
-                mode === "template" ? "Send Template" : "Send Message"
               )}
-            </Button>
-          </div>
+
+              {/* Error */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <p className="text-xs text-red-600">{error}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Pinned footer — always visible, never scrolls away */}
+            <div className="px-5 py-4 border-t border-[#f0f2f5] shrink-0 rounded-b-2xl bg-white">
+              <Button
+                onClick={handleSend}
+                disabled={sendDisabled}
+                className="w-full bg-[#128c7e] hover:bg-[#0f7a6d] text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Sending…
+                  </span>
+                ) : (
+                  mode === "template" ? "Send Template" : "Send Message"
+                )}
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </div>
