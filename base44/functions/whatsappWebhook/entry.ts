@@ -100,27 +100,64 @@ Deno.serve(async (req) => {
         if (message.type === "text") {
           content = message.text?.body || "";
           if (!content.trim()) continue;
+
+        } else if (message.type === "interactive") {
+          // Button reply from a template or interactive message
+          const interactiveType = message.interactive?.type;
+
+          if (interactiveType === "button_reply") {
+            // Receiver tapped a quick-reply button on a template
+            // Payload: { id: "button_id", title: "Button Label" }
+            const buttonTitle = message.interactive.button_reply?.title || "";
+            const buttonId = message.interactive.button_reply?.id || "";
+            messageType = "text";
+            content = buttonTitle
+              ? `[Button Reply] ${buttonTitle}`
+              : `[Button Reply] ${buttonId}`;
+
+          } else if (interactiveType === "list_reply") {
+            // Receiver selected an item from a list message
+            // Payload: { id: "row_id", title: "Row Title", description: "..." }
+            const listTitle = message.interactive.list_reply?.title || "";
+            const listId = message.interactive.list_reply?.id || "";
+            messageType = "text";
+            content = listTitle
+              ? `[List Reply] ${listTitle}`
+              : `[List Reply] ${listId}`;
+
+          } else {
+            // Unknown interactive subtype — log and skip
+            console.log(`Unknown interactive type: ${interactiveType}, skipping.`);
+            continue;
+          }
+
         } else if (message.type === "audio") {
           messageType = "audio";
           mediaUrl = storeMediaId(message.audio?.id);
           content = "[Voice Message]";
           mediaName = `voice-${waMessageId}.ogg`;
+
         } else if (message.type === "image") {
           messageType = "image";
           mediaUrl = storeMediaId(message.image?.id);
           content = message.image?.caption || "[Image]";
           mediaName = `image-${waMessageId}`;
+
         } else if (message.type === "document") {
           messageType = "document";
           mediaUrl = storeMediaId(message.document?.id);
           content = message.document?.filename || "[Document]";
           mediaName = message.document?.filename || null;
+
         } else if (message.type === "video") {
           messageType = "video";
           mediaUrl = storeMediaId(message.video?.id);
           content = message.video?.caption || "[Video]";
           mediaName = `video-${waMessageId}`;
+
         } else {
+          // Unhandled type (reaction, location, sticker, order, etc.) — log and skip
+          console.log(`Unhandled message type: ${message.type}, skipping.`);
           continue;
         }
 
@@ -166,6 +203,8 @@ Deno.serve(async (req) => {
         });
 
         // ── AI auto-reply guard ───────────────────────────────────────────────
+        // Button replies are intentional customer actions — AI should respond to them
+        // the same way it responds to text messages.
         const [freshConvs, aiSettings] = await Promise.all([
           base44.asServiceRole.entities.Conversation.filter({
             customer_phone: phone,
@@ -179,12 +218,19 @@ Deno.serve(async (req) => {
         aiSettings.forEach(s => { settingsMap[s.key] = s.value; });
         const aiGloballyEnabled = settingsMap["ai_enabled"] !== "false";
         const aiGlobalMode = settingsMap["ai_mode"] || "auto";
-        // Only send automatically in "auto" mode; in approval/draft/human modes, skip auto-send
         const autoSendEnabled = aiGloballyEnabled && aiGlobalMode === "auto";
 
-        const aiShouldReply =
+        // Allow AI to reply to text AND interactive replies (button/list)
+        const isReplyableContent =
           messageType === "text" &&
           content.trim() &&
+          !content.startsWith("[Voice") &&
+          !content.startsWith("[Image") &&
+          !content.startsWith("[Document") &&
+          !content.startsWith("[Video");
+
+        const aiShouldReply =
+          isReplyableContent &&
           autoSendEnabled &&
           freshConv?.handling_mode === "ai" &&
           freshConv?.ai_paused !== true &&
@@ -226,7 +272,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Race condition check
+          // Race condition check — agent may have taken over during LLM call
           const raceConvs = await base44.asServiceRole.entities.Conversation.filter({
             customer_phone: phone,
             owner_user_id: ownerUserId,
