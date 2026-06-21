@@ -8,7 +8,7 @@ import LeadPanel from "@/components/inbox/LeadPanel";
 import NewChatModal from "@/components/inbox/NewChatModal.jsx";
 import WaBanner from "@/components/inbox/WaBanner.jsx";
 import {
-  X, Upload, ChevronDown, FileText, CheckCircle,
+  X, Upload, ChevronDown, FileText, CheckCircle, Tag,
   XCircle, Loader2, Users, AlertTriangle, Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,9 @@ function BulkSendModal({ onClose, currentUser }) {
   const [phoneCol, setPhoneCol] = useState("");
   const [varCols, setVarCols] = useState([]); // array of column names, one per variable
 
+  // Campaign state
+  const [campaignName, setCampaignName] = useState("");
+
   // Sending state
   const [results, setResults] = useState([]); // { phone, name, status, error }
   const [sendingIndex, setSendingIndex] = useState(0);
@@ -203,6 +206,7 @@ function BulkSendModal({ onClose, currentUser }) {
               owner_user_id: currentUser?.id,
             });
             const preview = buildPreview(selectedTemplate.body_text, row.variables);
+            const campaignTag = campaignName.trim() ? [`campaign:${campaignName.trim()}`] : [];
             if (!existing.length) {
               const conv = await base44.entities.Conversation.create({
                 owner_user_id: currentUser?.id,
@@ -213,6 +217,7 @@ function BulkSendModal({ onClose, currentUser }) {
                 unread_count: 0,
                 status: "contacted",
                 handling_mode: "human",
+                tags: campaignTag,
               });
               await base44.entities.Message.create({
                 conversation_id: conv.id,
@@ -226,9 +231,14 @@ function BulkSendModal({ onClose, currentUser }) {
               });
             } else {
               const conv = existing[0];
+              const existingTags = conv.tags || [];
+              const mergedTags = campaignTag.length
+                ? [...new Set([...existingTags, ...campaignTag])]
+                : existingTags;
               await base44.entities.Conversation.update(conv.id, {
                 last_message: preview,
                 last_message_time: new Date().toISOString(),
+                tags: mergedTags,
               });
               await base44.entities.Message.create({
                 conversation_id: conv.id,
@@ -458,6 +468,23 @@ function BulkSendModal({ onClose, currentUser }) {
                 {sendRows.length > 3 && (
                   <p className="text-xs text-[#667781] text-center">...and {sendRows.length - 3} more</p>
                 )}
+              </div>
+
+              {/* Campaign name input */}
+              <div>
+                <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
+                  Campaign Name <span className="text-[#667781] font-normal">(optional but recommended)</span>
+                </label>
+                <input
+                  type="text"
+                  value={campaignName}
+                  onChange={e => setCampaignName(e.target.value)}
+                  placeholder="e.g. Real Estate Leads June, SaaS Outreach Q3..."
+                  className="w-full bg-[#f0f2f5] rounded-xl px-3 py-2.5 text-sm text-[#111b21] placeholder:text-[#667781] outline-none"
+                />
+                <p className="text-[11px] text-[#667781] mt-1">
+                  All contacts will be tagged with this campaign name. You can then track their quality in Leads &rarr; Campaigns.
+                </p>
               </div>
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
