@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, MessageSquarePlus } from "lucide-react";
+import { useState, useRef } from "react";
+import { Search, MessageSquarePlus, ChevronDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isToday, isThisWeek, format } from "date-fns";
 
@@ -45,9 +45,11 @@ function SkeletonRow() {
   );
 }
 
-export default function ConversationList({ conversations, selectedId, onSelect, onNewChat, loading }) {
+export default function ConversationList({ conversations, selectedId, onSelect, onNewChat, onBulkSend, loading }) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   const filtered = conversations.filter(c => {
     const q = search.toLowerCase();
@@ -72,14 +74,40 @@ export default function ConversationList({ conversations, selectedId, onSelect, 
               {conversations.length}
             </span>
           </h2>
-          <button
-            onClick={onNewChat}
-            className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center transition-colors shadow-sm"
-            title="New chat"
-          >
-            <MessageSquarePlus className="w-5 h-5 text-white" />
-          </button>
+
+          {/* + button with dropdown */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center transition-colors shadow-sm gap-0.5"
+              title="New chat"
+            >
+              <MessageSquarePlus className="w-5 h-5 text-white" />
+              <ChevronDown className={`w-3 h-3 text-white transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-[#e9edef] z-50 overflow-hidden">
+                <button
+                  onClick={() => { setMenuOpen(false); onNewChat(); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#111b21] hover:bg-[#f0f2f5] transition-colors"
+                >
+                  <MessageSquarePlus className="w-4 h-4 text-[#128c7e] shrink-0" />
+                  New Chat
+                </button>
+                <div className="border-t border-[#f0f2f5]" />
+                <button
+                  onClick={() => { setMenuOpen(false); onBulkSend(); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#111b21] hover:bg-[#f0f2f5] transition-colors"
+                >
+                  <Users className="w-4 h-4 text-[#128c7e] shrink-0" />
+                  Bulk Send
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#667781]" />
           <input
