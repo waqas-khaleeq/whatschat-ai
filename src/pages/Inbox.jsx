@@ -15,10 +15,140 @@ import { Button } from "@/components/ui/button";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function normalizePhone(raw) {
+// Country code data — code, name, dial, min/max local digits
+const COUNTRIES = [
+  { code: "PK", name: "Pakistan",          dial: "92",  min: 9,  max: 10 },
+  { code: "US", name: "United States",     dial: "1",   min: 10, max: 10 },
+  { code: "GB", name: "United Kingdom",    dial: "44",  min: 10, max: 10 },
+  { code: "SA", name: "Saudi Arabia",      dial: "966", min: 9,  max: 9  },
+  { code: "AE", name: "UAE",               dial: "971", min: 9,  max: 9  },
+  { code: "IN", name: "India",             dial: "91",  min: 10, max: 10 },
+  { code: "QA", name: "Qatar",             dial: "974", min: 8,  max: 8  },
+  { code: "KW", name: "Kuwait",            dial: "965", min: 8,  max: 8  },
+  { code: "BH", name: "Bahrain",           dial: "973", min: 8,  max: 8  },
+  { code: "OM", name: "Oman",              dial: "968", min: 8,  max: 8  },
+  { code: "EG", name: "Egypt",             dial: "20",  min: 10, max: 10 },
+  { code: "TR", name: "Turkey",            dial: "90",  min: 10, max: 10 },
+  { code: "DE", name: "Germany",           dial: "49",  min: 10, max: 11 },
+  { code: "FR", name: "France",            dial: "33",  min: 9,  max: 9  },
+  { code: "CA", name: "Canada",            dial: "1",   min: 10, max: 10 },
+  { code: "AU", name: "Australia",         dial: "61",  min: 9,  max: 9  },
+  { code: "NG", name: "Nigeria",           dial: "234", min: 10, max: 10 },
+  { code: "ZA", name: "South Africa",      dial: "27",  min: 9,  max: 9  },
+  { code: "BD", name: "Bangladesh",        dial: "880", min: 10, max: 10 },
+  { code: "LK", name: "Sri Lanka",         dial: "94",  min: 9,  max: 9  },
+  { code: "MY", name: "Malaysia",          dial: "60",  min: 9,  max: 10 },
+  { code: "SG", name: "Singapore",         dial: "65",  min: 8,  max: 8  },
+  { code: "ID", name: "Indonesia",         dial: "62",  min: 9,  max: 12 },
+  { code: "PH", name: "Philippines",       dial: "63",  min: 10, max: 10 },
+  { code: "NL", name: "Netherlands",       dial: "31",  min: 9,  max: 9  },
+  { code: "IT", name: "Italy",             dial: "39",  min: 9,  max: 10 },
+  { code: "ES", name: "Spain",             dial: "34",  min: 9,  max: 9  },
+  { code: "BR", name: "Brazil",            dial: "55",  min: 10, max: 11 },
+  { code: "MX", name: "Mexico",            dial: "52",  min: 10, max: 10 },
+  { code: "KE", name: "Kenya",             dial: "254", min: 9,  max: 9  },
+  { code: "GH", name: "Ghana",             dial: "233", min: 9,  max: 9  },
+  { code: "JP", name: "Japan",             dial: "81",  min: 10, max: 10 },
+  { code: "KR", name: "South Korea",       dial: "82",  min: 9,  max: 10 },
+  { code: "CN", name: "China",             dial: "86",  min: 11, max: 11 },
+  { code: "RU", name: "Russia",            dial: "7",   min: 10, max: 10 },
+  { code: "JO", name: "Jordan",            dial: "962", min: 8,  max: 9  },
+  { code: "LB", name: "Lebanon",           dial: "961", min: 7,  max: 8  },
+  { code: "IQ", name: "Iraq",              dial: "964", min: 10, max: 10 },
+  { code: "IR", name: "Iran",              dial: "98",  min: 10, max: 10 },
+  { code: "MA", name: "Morocco",           dial: "212", min: 9,  max: 9  },
+  { code: "DZ", name: "Algeria",           dial: "213", min: 9,  max: 9  },
+  { code: "TN", name: "Tunisia",           dial: "216", min: 8,  max: 8  },
+  { code: "AF", name: "Afghanistan",       dial: "93",  min: 9,  max: 9  },
+  { code: "NP", name: "Nepal",             dial: "977", min: 9,  max: 10 },
+  { code: "MM", name: "Myanmar",           dial: "95",  min: 8,  max: 9  },
+  { code: "TH", name: "Thailand",          dial: "66",  min: 9,  max: 9  },
+  { code: "VN", name: "Vietnam",           dial: "84",  min: 9,  max: 10 },
+  { code: "NO",  name: "Norway",           dial: "47",  min: 8,  max: 8  },
+  { code: "SE",  name: "Sweden",           dial: "46",  min: 9,  max: 9  },
+  { code: "CH",  name: "Switzerland",      dial: "41",  min: 9,  max: 9  },
+];
+
+// normalizePhone with explicit country dial code
+// countryDial: e.g. "92", "1", "971" — or "" to use raw number
+function normalizePhone(raw, countryDial = "") {
   let digits = String(raw).replace(/\D/g, "");
-  if (digits.startsWith("0") && digits.length === 11) digits = "92" + digits.slice(1);
-  return digits;
+  if (!countryDial) {
+    // Legacy fallback: Pakistani 0x rule only
+    if (digits.startsWith("0") && digits.length === 11) digits = "92" + digits.slice(1);
+    return digits;
+  }
+  // Strip leading zeros
+  digits = digits.replace(/^0+/, "");
+  // If number already starts with the country dial code, leave it
+  if (digits.startsWith(countryDial)) return digits;
+  // Otherwise prepend the country code
+  return countryDial + digits;
+}
+
+// Searchable country code picker component
+function CountryPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const filtered = COUNTRIES.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.dial.includes(search) ||
+    c.code.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = COUNTRIES.find(c => c.dial === value);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch(""); }}
+        className="w-full flex items-center justify-between gap-2 bg-[#f0f2f5] rounded-xl px-3 py-2.5 text-sm text-left hover:bg-[#e9edef] transition-colors"
+      >
+        {selected ? (
+          <span className="font-medium text-[#111b21]">
+            {selected.name} <span className="text-[#128c7e]">(+{selected.dial})</span>
+          </span>
+        ) : (
+          <span className="text-[#667781]">No normalization — use numbers as-is</span>
+        )}
+        <ChevronDown className={`w-4 h-4 text-[#667781] shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 bottom-full mb-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl overflow-hidden">
+          <div className="p-2 border-b border-[#f0f2f5]">
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search country..."
+              className="w-full bg-[#f0f2f5] rounded-lg px-3 py-2 text-sm outline-none"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); }}
+              className={`w-full text-left px-3 py-2.5 text-sm hover:bg-[#f0f2f5] transition-colors border-b border-[#f0f2f5] ${!value ? "bg-[#f0f2f5] font-semibold text-[#128c7e]" : "text-[#667781]"}`}
+            >
+              No normalization (use CSV number as-is)
+            </button>
+            {filtered.map(c => (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => { onChange(c.dial); setOpen(false); }}
+                className={`w-full text-left px-3 py-2.5 text-sm hover:bg-[#f0f2f5] transition-colors border-b border-[#f0f2f5] last:border-0 flex items-center justify-between ${value === c.dial ? "bg-[#f0f2f5]" : ""}`}
+              >
+                <span className="font-medium text-[#111b21]">{c.name}</span>
+                <span className="text-[#128c7e] font-mono text-xs shrink-0 ml-2">+{c.dial}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function parseCSV(text) {
@@ -110,10 +240,15 @@ function BulkSendModal({ onClose, currentUser }) {
   // CSV state
   const [csvData, setCsvData] = useState(null); // { headers, rows }
   const [phoneCol, setPhoneCol] = useState("");
+  const [countryDial, setCountryDial] = useState(""); // selected country dial code, "" = no normalization
   const [varCols, setVarCols] = useState([]); // array of column names, one per variable
 
   // Campaign state
   const [campaignName, setCampaignName] = useState("");
+
+  // Per-variable mode: "csv" (from column) or "fixed" (same value for all)
+  const [varModes, setVarModes] = useState([]); // "csv" | "fixed" per variable
+  const [varFixed, setVarFixed] = useState([]); // fixed value per variable
 
   // Sending state
   const [results, setResults] = useState([]); // { phone, name, status, error }
@@ -134,6 +269,8 @@ function BulkSendModal({ onClose, currentUser }) {
   // Reset var columns when template or phoneCol changes
   useEffect(() => {
     setVarCols(Array(varCount).fill(""));
+    setVarModes(Array(varCount).fill("csv"));
+    setVarFixed(Array(varCount).fill(""));
   }, [selectedTemplate, varCount]);
 
   // ── CSV upload ──
@@ -156,8 +293,10 @@ function BulkSendModal({ onClose, currentUser }) {
     if (!csvData || !phoneCol) return [];
     const phoneIdx = csvData.headers.indexOf(phoneCol);
     return csvData.rows.map(row => {
-      const phone = normalizePhone(row[phoneIdx] || "");
-      const variables = varCols.map(col => {
+      const phone = normalizePhone(row[phoneIdx] || "", countryDial);
+      const variables = Array.from({ length: varCount }, (_, i) => {
+        if (varModes[i] === "fixed") return varFixed[i] || "";
+        const col = varCols[i];
         const idx = csvData.headers.indexOf(col);
         return idx >= 0 ? (row[idx] || "").trim() : "";
       });
@@ -290,7 +429,9 @@ function BulkSendModal({ onClose, currentUser }) {
     );
   }
 
-  const canProceedMap = phoneCol && (varCount === 0 || varCols.every(v => v));
+  const canProceedMap = phoneCol && (varCount === 0 || varCols.every((v, i) =>
+    varModes[i] === "fixed" ? varFixed[i]?.trim() : v
+  ));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -350,30 +491,54 @@ function BulkSendModal({ onClose, currentUser }) {
                 <TemplatePicker templates={templates} selected={selectedTemplate} onSelect={setSelectedTemplate} />
               )}
               {selectedTemplate && (
-                <div className="rounded-xl overflow-hidden border border-[#e9edef]">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0f2f5] border-b border-[#e9edef]">
-                    <Eye className="w-3 h-3 text-[#667781]" />
-                    <span className="text-[11px] font-semibold text-[#667781] uppercase tracking-wide">Preview</span>
-                  </div>
-                  <div className="bg-[#e5ddd5] px-3 py-3">
-                    <div className="bg-white rounded-lg rounded-tl-none px-3 py-2.5 shadow-sm max-w-[90%]">
-                      {selectedTemplate.header_type === "TEXT" && selectedTemplate.header_text && (
-                        <p className="text-sm font-semibold text-[#111b21] mb-1">{selectedTemplate.header_text}</p>
-                      )}
-                      <p className="text-sm text-[#111b21] whitespace-pre-wrap leading-relaxed">{selectedTemplate.body_text}</p>
-                      {selectedTemplate.footer_text && (
-                        <p className="text-[11px] text-[#667781] mt-1">{selectedTemplate.footer_text}</p>
-                      )}
+                <>
+                  {/* Annotated body showing exactly where each variable sits */}
+                  <div className="rounded-xl overflow-hidden border border-[#e9edef]">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0f2f5] border-b border-[#e9edef]">
+                      <Eye className="w-3 h-3 text-[#667781]" />
+                      <span className="text-[11px] font-semibold text-[#667781] uppercase tracking-wide">Message structure</span>
+                    </div>
+                    <div className="bg-[#e5ddd5] px-3 py-3">
+                      <div className="bg-white rounded-lg rounded-tl-none px-3 py-2.5 shadow-sm max-w-[90%] space-y-1">
+                        {selectedTemplate.header_type === "TEXT" && selectedTemplate.header_text && (
+                          <p className="text-sm font-semibold text-[#111b21]">{selectedTemplate.header_text}</p>
+                        )}
+                        {/* Render body with highlighted variable placeholders */}
+                        <p className="text-sm text-[#111b21] whitespace-pre-wrap leading-relaxed">
+                          {selectedTemplate.body_text?.split(/(\{\{\d+\}\})/g).map((part, idx) => {
+                            const match = part.match(/\{\{(\d+)\}\}/);
+                            if (match) {
+                              return (
+                                <span key={idx} className="inline-flex items-center bg-[#128c7e]/15 text-[#128c7e] font-semibold rounded px-1 text-xs">
+                                  {part}
+                                </span>
+                              );
+                            }
+                            return <span key={idx}>{part}</span>;
+                          })}
+                        </p>
+                        {selectedTemplate.footer_text && (
+                          <p className="text-[11px] text-[#667781] mt-1">{selectedTemplate.footer_text}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {varCount > 0 && selectedTemplate && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <p className="text-xs text-amber-700">
-                    This template has <strong>{varCount} variable{varCount > 1 ? "s" : ""}</strong>. You will map them from CSV columns in the next steps.
-                  </p>
-                </div>
+                  {/* Variable legend */}
+                  {varCount > 0 && (
+                    <div className="bg-[#f0f2f5] rounded-xl px-3 py-2.5 space-y-1">
+                      <p className="text-[11px] font-semibold text-[#111b21] mb-1.5">Variables in this template:</p>
+                      {Array.from({ length: varCount }, (_, i) => {
+                        const labels = (() => { try { return JSON.parse(selectedTemplate.variable_labels || "[]"); } catch { return []; } })();
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-[11px] font-mono bg-[#128c7e]/15 text-[#128c7e] px-1.5 py-0.5 rounded shrink-0">{`{{${i+1}}}`}</span>
+                            <span className="text-[11px] text-[#667781]">{labels[i] || `Variable ${i + 1}`} — will be mapped in next step</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -406,37 +571,88 @@ function BulkSendModal({ onClose, currentUser }) {
           {step === "map" && csvData && (
             <>
               <p className="text-sm text-[#667781]">Map your CSV columns to the phone number{varCount > 0 ? " and template variables" : ""}.</p>
-              <div>
-                <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
-                  Phone Number Column <span className="text-red-500">*</span>
-                </label>
-                <ColSelect
-                  value={phoneCol}
-                  onChange={setPhoneCol}
-                  placeholder="Select phone column…"
-                />
-                <p className="text-[11px] text-[#667781] mt-1">Numbers without country code starting with 0 will be converted to +92 automatically.</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
+                    Phone Number Column <span className="text-red-500">*</span>
+                  </label>
+                  <ColSelect
+                    value={phoneCol}
+                    onChange={setPhoneCol}
+                    placeholder="Select phone column…"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-[#111b21] mb-1.5 block">
+                    Country Code
+                    <span className="text-[#667781] font-normal ml-1">(applied to all numbers)</span>
+                  </label>
+                  <CountryPicker value={countryDial} onChange={setCountryDial} />
+                  <p className="text-[11px] text-[#667781] mt-1.5">
+                    {countryDial
+                      ? `+${countryDial} will be prepended to every number after stripping leading zeros and existing code.`
+                      : "Numbers will be sent exactly as written in the CSV. Make sure they include country codes."
+                    }
+                  </p>
+                </div>
               </div>
               {varCount > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-[#111b21] block">Template Variables</label>
-                  {Array.from({ length: varCount }, (_, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono bg-[#e9edef] text-[#128c7e] px-1.5 py-0.5 rounded shrink-0">
-                        {`{{${i + 1}}}`}
-                      </span>
-                      <ColSelect
-                        value={varCols[i] || ""}
-                        onChange={v => {
-                          const updated = [...varCols];
-                          updated[i] = v;
-                          setVarCols(updated);
-                        }}
-                        placeholder={`Select column for variable ${i + 1}…`}
-                        exclude={[phoneCol, ...varCols.filter((_, j) => j !== i)]}
-                      />
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-[#111b21] block mb-0.5">Template Variables</label>
+                    <p className="text-[11px] text-[#667781]">For each variable choose: map from a CSV column (different per row) or use a fixed value (same for all contacts).</p>
+                  </div>
+                  {Array.from({ length: varCount }, (_, i) => {
+                    const labels = (() => { try { return JSON.parse(selectedTemplate?.variable_labels || "[]"); } catch { return []; } })();
+                    const isFixed = varModes[i] === "fixed";
+                    return (
+                      <div key={i} className="bg-[#f0f2f5] rounded-xl p-3 space-y-2">
+                        {/* Variable label row */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono bg-[#128c7e]/15 text-[#128c7e] px-1.5 py-0.5 rounded shrink-0">
+                            {`{{${i + 1}}}`}
+                          </span>
+                          <span className="text-xs font-semibold text-[#111b21] truncate flex-1">
+                            {labels[i] || `Variable ${i + 1}`}
+                          </span>
+                          {/* CSV / Fixed toggle */}
+                          <div className="flex gap-0.5 bg-white rounded-lg p-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => { const m = [...varModes]; m[i] = "csv"; setVarModes(m); }}
+                              className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${!isFixed ? "bg-[#128c7e] text-white" : "text-[#667781] hover:text-[#111b21]"}`}
+                            >
+                              CSV
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { const m = [...varModes]; m[i] = "fixed"; setVarModes(m); }}
+                              className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${isFixed ? "bg-[#128c7e] text-white" : "text-[#667781] hover:text-[#111b21]"}`}
+                            >
+                              Fixed
+                            </button>
+                          </div>
+                        </div>
+                        {/* Input row */}
+                        {isFixed ? (
+                          <input
+                            type="text"
+                            value={varFixed[i] || ""}
+                            onChange={e => { const v = [...varFixed]; v[i] = e.target.value; setVarFixed(v); }}
+                            placeholder={`Same value for all contacts (e.g. "Smart Logics")`}
+                            className="w-full bg-white rounded-lg px-3 py-2 text-sm text-[#111b21] placeholder:text-[#667781] outline-none"
+                          />
+                        ) : (
+                          <ColSelect
+                            value={varCols[i] || ""}
+                            onChange={v => { const updated = [...varCols]; updated[i] = v; setVarCols(updated); }}
+                            placeholder={`Select CSV column for {{${i + 1}}}…`}
+                            exclude={[phoneCol, ...varCols.filter((_, j) => j !== i)]}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
