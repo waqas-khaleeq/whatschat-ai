@@ -909,19 +909,30 @@ export default function Inbox() {
 
         convUnsubRef.current = base44.entities.Conversation.subscribe((event) => {
           if (event.data?.owner_user_id !== currentUser.id) return;
+
           if (event.type === "create") {
             setConversations(prev => {
               if (prev.some(c => c.id === event.data.id)) return prev;
+              // New conversation always goes to top
               return [event.data, ...prev];
             });
+
           } else if (event.type === "update") {
-            setConversations(prev =>
-              prev.map(c => c.id === event.data.id ? event.data : c)
-                .sort((a, b) =>
-                  new Date(b.last_message_time || b.created_date) - new Date(a.last_message_time || a.created_date)
-                )
-            );
+            setConversations(prev => {
+              const updated = prev.map(c => c.id === event.data.id ? event.data : c);
+              // Pull the updated conversation to top immediately, then sort the rest.
+              // This ensures it bubbles up even if last_message_time hasn't
+              // fully propagated in the event payload yet.
+              const target = updated.find(c => c.id === event.data.id);
+              const rest = updated.filter(c => c.id !== event.data.id);
+              rest.sort((a, b) =>
+                new Date(b.last_message_time || b.created_date) -
+                new Date(a.last_message_time || a.created_date)
+              );
+              return target ? [target, ...rest] : rest;
+            });
             setSelected(prev => prev?.id === event.data.id ? event.data : prev);
+
           } else if (event.type === "delete") {
             setConversations(prev => prev.filter(c => c.id !== event.data.id));
             setSelected(prev => prev?.id === event.data.id ? null : prev);
