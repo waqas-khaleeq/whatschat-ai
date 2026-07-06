@@ -75,8 +75,7 @@ function TemplatePicker({ templates, selected, onSelect }) {
       </button>
 
       {open && approved.length > 0 && (
-        /* Render upward so it never goes off-screen below the button */
-        <div className="absolute z-50 bottom-full mb-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-44 overflow-y-auto">
+        <div className="mt-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-60 overflow-y-auto">
           {approved.map(t => (
             <button
               key={t.id}

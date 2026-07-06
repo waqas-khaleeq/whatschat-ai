@@ -211,7 +211,7 @@ function TemplatePicker({ templates, selected, onSelect }) {
         <ChevronDown className={`w-4 h-4 text-[#667781] shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && approved.length > 0 && (
-        <div className="absolute z-50 bottom-full mb-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-44 overflow-y-auto">
+        <div className="mt-1 w-full bg-white border border-[#e9edef] rounded-xl shadow-xl max-h-60 overflow-y-auto">
           {approved.map(t => (
             <button key={t.id} type="button"
               onClick={() => { onSelect(t); setOpen(false); }}
