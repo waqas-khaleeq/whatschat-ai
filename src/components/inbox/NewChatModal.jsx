@@ -179,7 +179,7 @@ export default function NewChatModal({ onClose, onConversationCreated, currentUs
     if (step !== 2) return;
     setTemplatesLoading(true);
     base44.entities.MessageTemplate
-      .filter({ owner_user_id: currentUser?.id })
+      .filter({ owner_user_id: currentUser?.id }, "-created_date", 10000)
       .then(rows => setTemplates(rows || []))
       .catch(() => setTemplates([]))
       .finally(() => setTemplatesLoading(false));

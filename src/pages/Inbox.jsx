@@ -260,7 +260,7 @@ function BulkSendModal({ onClose, currentUser }) {
   // Load approved templates
   useEffect(() => {
     base44.entities.MessageTemplate
-      .filter({ owner_user_id: currentUser?.id })
+      .filter({ owner_user_id: currentUser?.id }, "-created_date", 10000)
       .then(rows => setTemplates(rows || []))
       .catch(() => setTemplates([]))
       .finally(() => setTemplatesLoading(false));
