@@ -894,7 +894,7 @@ export default function Inbox() {
         const urlId = params.get("id");
 
         const data = await base44.entities.Conversation.filter(
-          { owner_user_id: currentUser.id }, "-last_message_time", 100
+          { owner_user_id: currentUser.id }, "-last_message_time", 10000
         );
         const sorted = [...data].sort((a, b) =>
           new Date(b.last_message_time || b.created_date) - new Date(a.last_message_time || a.created_date)
