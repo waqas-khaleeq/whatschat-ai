@@ -1,6 +1,6 @@
 import { base44, setDemoActive } from '@/api/base44Client';
 
-export const DEMO_EMAIL = "demo@whatschat.ai";
+export const DEMO_EMAIL = "smartlogics.ai@gmail.com";
 export const DEMO_DATA_OWNER_ID = "6a0722564fe2ca39da95f461";
 
 // Fetches the current user. For the demo showcase account, remaps `id` to the

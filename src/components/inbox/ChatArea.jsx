@@ -563,13 +563,18 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
             Reopen
           </button>
         </div>
-      ) : isDemo ? (
-        <div className="bg-[#f0f2f5] border-t border-[#e9edef] px-4 py-3.5 flex items-center justify-center gap-2">
-          <EyeOff className="w-4 h-4 text-[#667781]" />
-          <span className="text-sm text-[#667781]">Demo mode — messaging is disabled</span>
-        </div>
       ) : (
-        <div className="bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]">
+        <>
+          {isDemo && (
+            <div className="bg-amber-50 border-t border-amber-200 px-4 py-1.5 flex items-center justify-center gap-1.5 shrink-0">
+              <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+              <span className="text-xs font-medium text-amber-700">Demo mode — messaging is disabled</span>
+            </div>
+          )}
+          <div className={cn(
+            "bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]",
+            isDemo && "opacity-50 pointer-events-none select-none"
+          )}>
           {!mediaPreview && (
             <>
               <button
@@ -646,7 +651,8 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
               }
             </button>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
