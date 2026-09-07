@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
 import AppLayout from "@/components/layout/AppLayout";
 import ConversationList from "@/components/inbox/ConversationList";
 import ChatArea from "@/components/inbox/ChatArea";
@@ -879,7 +880,7 @@ export default function Inbox() {
   }, [listWidth]);
 
   useEffect(() => {
-    base44.auth.me().then(u => setCurrentUser(u)).catch(() => {});
+    fetchCurrentUser().then(u => setCurrentUser(u)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1005,6 +1006,7 @@ export default function Inbox() {
               onNewChat={() => setShowNewChat(true)}
               onBulkSend={() => setShowBulkSend(true)}
               loading={loading}
+              disabled={!!currentUser?.isDemo}
             />
           </div>
 

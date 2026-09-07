@@ -47,6 +47,7 @@ export default function TemplatesTab({ currentUser }) {
   };
 
   const handleSync = async () => {
+    if (currentUser?.isDemo) return;
     setSyncing(true);
     try {
       const res = await base44.functions.invoke('syncWhatsAppTemplates', { user_id: currentUser.id });
@@ -62,6 +63,7 @@ export default function TemplatesTab({ currentUser }) {
   };
 
   const handleRefreshStatus = async (template) => {
+    if (currentUser?.isDemo) return;
     try {
       const res = await base44.functions.invoke('checkTemplateStatus', {
         user_id: currentUser.id,
@@ -79,6 +81,7 @@ export default function TemplatesTab({ currentUser }) {
   };
 
   const handleDelete = async (template) => {
+    if (currentUser?.isDemo) return;
     if (!confirm(`Delete template "${template.display_name}"?`)) return;
     try {
       const res = await base44.functions.invoke('deleteWhatsAppTemplate', {
@@ -127,14 +130,14 @@ export default function TemplatesTab({ currentUser }) {
         <div className="flex gap-2">
           <Button
             onClick={handleSync}
-            disabled={syncing}
+            disabled={syncing || !!currentUser?.isDemo}
             variant="outline"
             className="gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing...' : 'Sync from Meta'}
           </Button>
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+          <Button onClick={() => setShowCreateModal(true)} disabled={!!currentUser?.isDemo} className="gap-2">
             <Plus className="w-4 h-4" />
             Create Template
           </Button>

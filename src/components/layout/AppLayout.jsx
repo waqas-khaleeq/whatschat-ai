@@ -5,7 +5,8 @@ import {
   Bot, Settings, ChevronLeft, ChevronRight, Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
+import DemoBanner from "@/components/DemoBanner";
 
 const navItems = [
   { path: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -29,7 +30,7 @@ export default function AppLayout({ children }) {
   const location = useLocation();
 
   useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
+    fetchCurrentUser().then(setCurrentUser).catch(() => {});
   }, []);
 
   return (
@@ -151,6 +152,9 @@ export default function AppLayout({ children }) {
             </div>
           </div>
         </header>
+
+        {/* Demo banner */}
+        {currentUser?.isDemo && <DemoBanner />}
 
         {/* Page content */}
         <main className="flex-1 overflow-hidden pb-14 md:pb-0">

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
 import PipelineSettings from "@/components/settings/PipelineSettings";
 import TemplatesTab from "@/components/settings/TemplatesTab";
 
@@ -87,7 +88,7 @@ export default function Settings() {
     const cfg = configs[0];
     setWaConfig(cfg);
     setWaPhoneNumberId(cfg.phone_number_id || "");
-    setWaAccessToken(cfg.access_token || "");
+    setWaAccessToken(user.isDemo ? "•••••••••• (hidden in demo mode)" : (cfg.access_token || ""));
     setWaWabaId(cfg.waba_id || "");
     setWaDisplayName(cfg.display_name || "");
     return cfg;
@@ -95,7 +96,7 @@ export default function Settings() {
 
   useEffect(() => {
     Promise.all([
-      base44.auth.me().then(u => {
+      fetchCurrentUser().then(u => {
         setCurrentUser(u);
         return loadWAConfig(u);
       }).catch(() => null),
@@ -149,6 +150,7 @@ export default function Settings() {
   };
 
   const handleWADisconnect = async () => {
+    if (currentUser?.isDemo) return;
     if (!waConfig || !window.confirm("Disconnect WhatsApp? You will be redirected to setup.")) return;
     await base44.entities.UserWAConfig.update(waConfig.id, { is_active: false, connection_status: "pending" });
     navigate("/setup");
@@ -181,6 +183,7 @@ export default function Settings() {
   const [notifMissed, setNotifMissed] = useState(false);
 
   const handleSave = async () => {
+    if (currentUser?.isDemo) return;
     // Save calendar settings to database
     const calSettings = [
       { key: "cal_client_id", value: calClientId },

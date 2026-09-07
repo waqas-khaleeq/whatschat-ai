@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import {
@@ -482,7 +483,7 @@ export default function Leads() {
   }, []);
 
   useEffect(() => {
-    base44.auth.me().then(async u => {
+    fetchCurrentUser().then(async u => {
       setCurrentUser(u);
       const configs = await base44.entities.UserWAConfig.filter({ user_id: u.id, is_active: true });
       if (!configs.length || configs[0].connection_status !== "connected") { navigate("/setup"); return []; }
@@ -534,7 +535,7 @@ export default function Leads() {
               {leads.length} leads · {campaigns.length} campaigns
             </p>
           </div>
-          <Button className="gap-2 min-h-[44px]" onClick={() => setShowAdd(true)}>
+          <Button className="gap-2 min-h-[44px]" onClick={() => setShowAdd(true)} disabled={!!currentUser?.isDemo}>
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add Lead</span>
           </Button>

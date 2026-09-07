@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
 import { MessageSquare, Users, Calendar, Bot, TrendingUp, Clock, CheckCircle, AlertCircle, ArrowRight, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(async u => {
+    fetchCurrentUser().then(async u => {
       const configs = await base44.entities.UserWAConfig.filter({ user_id: u.id, is_active: true });
       if (!configs.length || configs[0].connection_status !== "connected") {
         navigate("/setup");

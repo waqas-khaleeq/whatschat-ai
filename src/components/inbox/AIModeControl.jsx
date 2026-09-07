@@ -3,7 +3,7 @@ import { Bot, User, PauseCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 
-export default function AIModeControl({ conversation, onModeChange }) {
+export default function AIModeControl({ conversation, onModeChange, disabled }) {
   const [loading, setLoading] = useState(false);
 
   if (!conversation) return null;
@@ -11,7 +11,7 @@ export default function AIModeControl({ conversation, onModeChange }) {
   const mode = conversation.ai_paused ? "paused" : conversation.handling_mode;
 
   const setMode = async (newMode) => {
-    if (loading) return;
+    if (loading || disabled) return;
     setLoading(true);
     try {
       await base44.functions.invoke("toggleAIMode", {
@@ -35,12 +35,12 @@ export default function AIModeControl({ conversation, onModeChange }) {
       {buttons.map(({ key, label, Icon, activeClass, inactiveClass }) => (
         <button
           key={key}
-          disabled={loading}
+          disabled={loading || disabled}
           onClick={() => setMode(key)}
           className={cn(
             "flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold transition-all",
             mode === key ? activeClass : inactiveClass,
-            loading && "opacity-50 cursor-not-allowed"
+            (loading || disabled) && "opacity-50 cursor-not-allowed"
           )}
           style={{ minHeight: 32 }}
         >

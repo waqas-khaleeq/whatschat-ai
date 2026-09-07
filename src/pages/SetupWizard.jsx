@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
+import { fetchCurrentUser } from "@/lib/demoMode";
 import { Check, Copy, Eye, EyeOff, ExternalLink, CheckCircle, Loader2, ArrowRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -394,7 +395,7 @@ export default function SetupWizard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    fetchCurrentUser().then(u => {
       if (!u) return;
       setUserId(u.id);
       // If already connected, redirect to inbox

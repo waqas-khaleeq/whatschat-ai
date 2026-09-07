@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import {
   Send, Bot, MoreVertical,
   StickyNote, Zap, X, Paperclip, Mic, Square,
-  Info, ChevronDown, ArrowLeft, AlertTriangle, CheckCircle, RotateCcw
+  Info, ChevronDown, ArrowLeft, AlertTriangle, CheckCircle, RotateCcw, EyeOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
@@ -347,6 +347,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
   }
 
   const aiMode = liveConv?.handling_mode === "ai" && !liveConv?.ai_paused;
+  const isDemo = !!currentUser?.isDemo;
   const isClosed = liveConv?.status === "closed";
   const initials = (liveConv?.customer_name || liveConv?.customer_phone || "?")[0].toUpperCase();
   const grouped = groupMessagesByDate(messages);
@@ -386,7 +387,7 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <AIModeControl conversation={liveConv} onModeChange={handleModeChange} />
+          <AIModeControl conversation={liveConv} onModeChange={handleModeChange} disabled={isDemo} />
           <button
             onClick={onShowDetails}
             className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors"
@@ -396,7 +397,8 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(v => !v)}
-              className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors"
+              disabled={isDemo}
+              className="w-9 h-9 rounded-full hover:bg-[#e9edef] flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <MoreVertical className="w-5 h-5 text-[#54656f]" />
             </button>
@@ -560,6 +562,11 @@ export default function ChatArea({ conversation, onHandoverChange, onShowDetails
           <button onClick={handleReopen} className="shrink-0 text-xs font-semibold text-[#128c7e] hover:text-[#0f7a6d] underline underline-offset-2">
             Reopen
           </button>
+        </div>
+      ) : isDemo ? (
+        <div className="bg-[#f0f2f5] border-t border-[#e9edef] px-4 py-3.5 flex items-center justify-center gap-2">
+          <EyeOff className="w-4 h-4 text-[#667781]" />
+          <span className="text-sm text-[#667781]">Demo mode — messaging is disabled</span>
         </div>
       ) : (
         <div className="bg-[#f0f2f5] px-3 py-2 flex items-end gap-2 shrink-0 border-t border-[#e9edef]">

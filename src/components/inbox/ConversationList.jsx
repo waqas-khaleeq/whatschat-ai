@@ -45,7 +45,7 @@ function SkeletonRow() {
   );
 }
 
-export default function ConversationList({ conversations, selectedId, onSelect, onNewChat, onBulkSend, loading }) {
+export default function ConversationList({ conversations, selectedId, onSelect, onNewChat, onBulkSend, loading, disabled }) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -79,7 +79,8 @@ export default function ConversationList({ conversations, selectedId, onSelect, 
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(v => !v)}
-              className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center transition-colors shadow-sm gap-0.5"
+              disabled={disabled}
+              className="w-11 h-11 rounded-full bg-[#128c7e] hover:bg-[#0f7a6d] flex items-center justify-center transition-colors shadow-sm gap-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
               title="New chat"
             >
               <MessageSquarePlus className="w-5 h-5 text-white" />
